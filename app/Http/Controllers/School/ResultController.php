@@ -10,6 +10,7 @@ use App\Models\ResultPublication;
 use App\Models\Student;
 use App\Models\Term;
 use App\Models\TermReport;
+use App\Support\Attendance\AttendanceSummary;
 use App\Support\Results\ResultCalculator;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -117,6 +118,8 @@ class ResultController extends Controller
             'session' => $isFinalTerm ? ($calculator->sessionSoFar($enrolment->classArm, $term, $results)[$enrolment->id] ?? null) : null,
             'sessionTerms' => $isFinalTerm ? Term::query()->where('academic_session_id', $term->academic_session_id)->where('sequence', '<=', $term->sequence)->orderBy('sequence')->get() : collect(),
             'nextLevel' => $isFinalTerm ? $enrolment->classArm->level->nextLevel() : null,
+            'register' => AttendanceSummary::forTerm($term, [$enrolment->id])[$enrolment->id],
+            'registerDays' => AttendanceSummary::daysTaken($term, $enrolment->class_arm_id),
         ]);
     }
 

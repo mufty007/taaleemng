@@ -24,7 +24,7 @@
                 </div>
                 <x-badge :tone="$invoice->status->tone()">{{ $invoice->status->label() }}</x-badge>
                 @if ($invoice->balance() > 0 && $canPayOnline)
-                    <form method="POST" action="{{ route('school.portal.invoices.pay', $invoice) }}">
+                    <form method="POST" action="{{ route('school.portal.invoices.pay', $invoice) }}" data-native>
                         @csrf
                         <x-button variant="brand" size="sm" icon="credit-card">Pay {{ Money::format($invoice->balance()) }} online</x-button>
                     </form>
@@ -45,7 +45,7 @@
                     <div class="font-medium">{{ Money::format($payment->amount) }} <span class="text-sm font-normal text-muted">· {{ $payment->method->label() }}</span></div>
                     <div class="text-xs text-muted">{{ $payment->paid_at?->format('j M Y') }} · {{ $payment->receipt_no }}</div>
                 </div>
-                <x-button variant="ghost" size="sm" icon="printer" :href="route('school.payments.receipt', $payment)">Receipt</x-button>
+                <x-button data-native variant="ghost" size="sm" icon="printer" :href="route('school.payments.receipt', $payment)">Receipt</x-button>
             </div>
         @empty
             <p class="m-0 px-5 py-4 text-sm text-muted">No payments yet.</p>

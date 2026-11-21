@@ -9,12 +9,12 @@
         </div>
     @endunless
 
-    <div class="relative overflow-hidden rounded-3xl bg-brand-600 p-6 text-white sm:p-8" data-enter>
+    <div @class(['relative overflow-hidden rounded-3xl p-6 text-white sm:p-8', 'bg-brand-600' => $ownProfile, 'bg-ink' => ! $ownProfile]) data-enter>
         <div class="absolute -top-24 -right-24 size-72 rounded-full border-[48px] border-white/10" aria-hidden="true"></div>
         <div class="relative flex flex-wrap items-center gap-5">
             <span class="grid size-20 flex-none place-items-center rounded-3xl bg-white text-2xl font-bold text-brand-600">{{ $student->initials() }}</span>
             <div class="min-w-0 flex-1">
-                <div class="text-sm font-medium text-brand-100">{{ $ownProfile ? 'Welcome back' : $currentSchool->name }}</div>
+                <div class="text-sm font-medium text-brand-100">{{ $ownProfile ? 'Welcome back' : 'Your child at '.$currentSchool->name }}</div>
                 <h1 class="m-0 text-[30px] leading-tight font-bold tracking-[-0.03em]">{{ $ownProfile ? $student->first_name : $student->fullName() }}</h1>
                 <div class="mt-2 flex flex-wrap gap-2 text-sm">
                     @if ($arm)
@@ -27,12 +27,22 @@
     </div>
 
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-3" data-stagger>
-        <x-stat-card label="Form teacher" :value="$arm?->formTeacher?->fullName() ?? '—'" icon="user-round" class="[&_div.text-3xl]:text-xl" />
-        <x-stat-card label="Subjects" :value="(string) ($arm?->classSubjects->count() ?? 0)" icon="book-open" tone="sky" />
-        <x-stat-card label="Students in class" :value="(string) $classmates" icon="users" tone="naija" />
+        @php($todo = $assignments->reject(fn ($assignment) => $submissions->has($assignment->id) || $assignment->isPastDue())->count())
+        @php($openQuizzes = $quizzes->filter(fn ($quiz) => $quiz->isOpen() && ! $quizAttempts->get($quiz->id)?->submitted_at)->count())
+        @if ($ownProfile)
+            <a href="{{ route('school.portal.classwork') }}#todo" class="contents"><x-stat-card label="To hand in" :value="(string) $todo" icon="notebook-pen" tone="gold" :hint="$todo ? 'Assignments due soon' : 'All caught up'" /></a>
+            <a href="{{ route('school.portal.classwork') }}" class="contents"><x-stat-card label="Quizzes open" :value="(string) $openQuizzes" icon="monitor-check" :hint="$openQuizzes ? 'Take them in My work' : 'None right now'" /></a>
+            <x-stat-card label="Attendance this term" :value="$attendance && $attendance['rate'] !== null ? $attendance['rate'].'%' : '—'" icon="clipboard-check" tone="naija" :hint="$attendance ? $attendance['absent'].' days absent' : null" />
+        @else
+            <x-stat-card label="Attendance this term" :value="$attendance && $attendance['rate'] !== null ? $attendance['rate'].'%' : '—'" icon="clipboard-check" tone="naija" :hint="$attendance ? $attendance['absent'].' absent · '.$attendance['late'].' late' : null" />
+            <x-stat-card label="School fees" :value="$balance > 0 ? \App\Support\Money::format($balance) : 'Paid up'" icon="receipt" :tone="$balance > 0 ? 'gold' : 'naija'" :hint="$balance > 0 ? 'Outstanding' : null" />
+            <x-stat-card label="Homework" :value="$submissions->count().' / '.$assignments->count()" icon="notebook-pen" tone="sky" hint="Handed in this term" />
+        @endif
     </div>
 
-    <x-tabs :tabs="array_filter(['results' => ['label' => 'Results', 'count' => $publishedResults->count()], 'fees' => ['label' => 'Fees', 'count' => $invoices->filter(fn ($invoice) => $invoice->status->isOpen())->count()], 'subjects' => 'Subjects & teachers', 'calendar' => 'Term calendar', 'contacts' => $ownProfile ? null : 'Contacts'])" label="Class information" class="max-w-4xl">
+    <x-tabs :tabs="$ownProfile
+        ? ['results' => ['label' => 'Results', 'count' => $publishedResults->count()], 'work' => ['label' => 'My work', 'count' => $todo + $openQuizzes], 'attendance' => 'Attendance', 'subjects' => 'Subjects & teachers', 'calendar' => 'Term calendar']
+        : ['results' => ['label' => 'Results', 'count' => $publishedResults->count()], 'fees' => ['label' => 'Fees', 'count' => $invoices->filter(fn ($invoice) => $invoice->status->isOpen())->count()], 'attendance' => 'Attendance', 'work' => 'Homework & tests', 'subjects' => 'Teachers', 'calendar' => 'Term calendar', 'contacts' => 'Contacts']" label="Class information" class="max-w-4xl">
     <x-tab name="results">
         @if ($publishedResults->isEmpty())
             <x-card><x-empty-state icon="file-text" title="No results yet" body="Results appear here as soon as the school publishes them for your class." /></x-card>
@@ -46,15 +56,25 @@
                         </div>
                         <div class="text-center"><div class="text-xs text-muted">Average</div><div class="text-xl font-bold">{{ $result['row']['average'] }}</div></div>
                         <div class="text-center"><div class="text-xs text-muted">Position</div><div class="text-xl font-bold text-brand-600">{{ isset($result['row']['position']) ? \App\Support\Results\ResultCalculator::ordinal($result['row']['position']) : '—' }} <span class="text-sm font-medium text-muted">of {{ $result['size'] }}</span></div></div>
-                        <x-button variant="soft" icon="file-text" :href="route('school.results.report', [$student, 'term' => $result['term']->id])">Report card</x-button>
+                        <x-button data-native variant="soft" icon="file-text" :href="route('school.results.report', [$student, 'term' => $result['term']->id])">Report card</x-button>
                     </div>
                 @endforeach
             </div>
         @endif
     </x-tab>
 
-    <x-tab name="fees">
-        @include('portal._fees')
+    @unless ($ownProfile)
+        <x-tab name="fees">
+            @include('portal._fees')
+        </x-tab>
+    @endunless
+
+    <x-tab name="attendance">
+        @include('portal._attendance')
+    </x-tab>
+
+    <x-tab name="work">
+        @include('portal._classwork')
     </x-tab>
 
     <x-tab name="subjects">

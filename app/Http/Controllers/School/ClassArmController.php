@@ -12,6 +12,7 @@ use App\Models\ClassLevel;
 use App\Models\Staff;
 use App\Models\Stream;
 use App\Models\Subject;
+use App\Support\Classwork\ClassworkAccess;
 use App\Support\Tenancy\TenantRule;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
@@ -37,6 +38,15 @@ class ClassArmController extends Controller
             ->groupBy(fn (ClassLevel $level) => $level->section->label());
 
         $myArmIds = $request->user()->staffRecord()?->classArmIds() ?? [];
+
+        // Teachers only see the classes they teach or are form teacher of.
+        if (! $request->user()->can('students.view-all')) {
+            $levels = $levels
+                ->map(fn ($sectionLevels) => $sectionLevels
+                    ->each(fn (ClassLevel $level) => $level->setRelation('arms', $level->arms->whereIn('id', $myArmIds)->values()))
+                    ->filter(fn (ClassLevel $level) => $level->arms->isNotEmpty()))
+                ->filter(fn ($sectionLevels) => $sectionLevels->isNotEmpty());
+        }
 
         return view('school.classes.index', [
             'levelsBySection' => $levels,
@@ -73,6 +83,8 @@ class ClassArmController extends Controller
             'enrolments' => $enrolments,
             'session' => $session,
             'canManage' => $user->can('academics.manage'),
+            'canRegister' => AttendanceController::canTake($user, $classArm),
+            'myClassSubjectId' => $classArm->classSubjects->first(fn ($classSubject) => ClassworkAccess::canManage($user, $classSubject))?->id,
             'teacherOptions' => $this->teacherOptions(),
             'subjectOptions' => Subject::query()
                 ->whereNotIn('id', $classArm->classSubjects->pluck('subject_id'))

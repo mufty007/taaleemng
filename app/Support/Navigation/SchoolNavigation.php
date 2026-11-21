@@ -33,7 +33,7 @@ final class SchoolNavigation
                 ['Subjects', 'book-open', 'school.subjects.index', 'academics.manage', 'school.subjects.*'],
                 ['Promotion', 'trending-up', 'school.promotion.index', 'academics.manage', 'school.promotion.*'],
                 ['Time Table', 'calendar-days', null, 'timetable.manage', null],
-                ['Attendance', 'clipboard-check', null, 'attendance.take', null],
+                ['Attendance', 'clipboard-check', 'school.attendance.index', 'attendance.take', 'school.attendance.*'],
             ],
             'People' => [
                 ['Students', 'graduation-cap', 'school.students.index', 'students.view', 'school.students.*'],
@@ -43,7 +43,7 @@ final class SchoolNavigation
             'Results' => [
                 ['Score entry', 'file-pen-line', 'school.scores.index', 'scores.enter', 'school.scores.*'],
                 ['Results & broadsheets', 'file-text', 'school.results.index', 'results.view', 'school.results.*'],
-                ['Exams & CBT', 'monitor-check', null, 'cbt.manage', null],
+                ['Classwork & CBT', 'monitor-check', 'school.classwork.index', 'scores.enter', 'school.classwork.*'],
             ],
             'Finance' => [
                 ['Invoices', 'receipt', 'school.invoices.index', 'finance.view', 'school.invoices.*'],
@@ -75,12 +75,14 @@ final class SchoolNavigation
      */
     private static function portalGroups(User $user): array
     {
-        $home = $user->guardianRecord() ? ['My children', 'users', 'school.portal', null, 'school.portal*'] : ['My class', 'graduation-cap', 'school.portal', null, 'school.portal*'];
+        if ($user->guardianRecord()) {
+            return ['Family' => [['My children', 'users', 'school.portal', null, 'school.portal*']]];
+        }
 
         return [
-            'Portal' => [
-                $home,
-                ['Attendance', 'clipboard-check', null, null, null],
+            'My school' => [
+                ['My day', 'sun', 'school.portal', null, 'school.portal'],
+                ['My work', 'notebook-pen', 'school.portal.classwork', null, 'school.portal.classwork'],
             ],
         ];
     }

@@ -70,7 +70,7 @@
                     <div class="text-sm text-muted">Finished {{ $import->finished_at?->format('j M Y, g:ia') }}.{{ $problemCount ? ' '.$problemCount.' '.str('row')->plural($problemCount).' left out; see Problems.' : '' }}</div>
                 </div>
                 @if ($import->credentials)
-                    <x-button variant="brand" icon="download" :href="route('school.students.import.credentials', $import)">Download logins (CSV)</x-button>
+                    <x-button data-native variant="brand" icon="download" :href="route('school.students.import.credentials', $import)">Download logins (CSV)</x-button>
                 @else
                     <x-badge>Logins downloaded</x-badge>
                 @endif

@@ -25,7 +25,7 @@
             </div>
             <div class="min-w-[160px] flex-1">
                 <label for="class" class="sr-only">Class</label>
-                <select id="class" name="class" class="field" x-data x-on:change="$el.form.submit()">
+                <select id="class" name="class" class="field" x-data x-on:change="$el.form.requestSubmit()">
                     <option value="">All classes</option>
                     @foreach ($classOptions as $ulid => $label)
                         <option value="{{ $ulid }}" @selected($selectedArm?->ulid === $ulid)>{{ $label }}</option>
@@ -34,7 +34,7 @@
             </div>
             <div class="min-w-[140px]">
                 <label for="status" class="sr-only">Status</label>
-                <select id="status" name="status" class="field" x-data x-on:change="$el.form.submit()">
+                <select id="status" name="status" class="field" x-data x-on:change="$el.form.requestSubmit()">
                     @foreach ($statusOptions as $value => $label)
                         <option value="{{ $value }}" @selected($status === $value)>{{ $label }}</option>
                     @endforeach

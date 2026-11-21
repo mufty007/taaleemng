@@ -1,8 +1,12 @@
 import Alpine from 'alpinejs';
 import collapse from '@alpinejs/collapse';
 import focus from '@alpinejs/focus';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { initMotion } from './motion';
+import { startNavigation } from './navigation';
+import attendance from './components/attendance';
 import broadsheet from './components/broadsheet';
+import { quizBuilder, quizTaker } from './components/quiz';
 import importProgress from './components/import-progress';
 import remarks from './components/remarks';
 import scorebook from './components/scorebook';
@@ -11,7 +15,10 @@ import { store } from './store';
 Alpine.plugin(collapse);
 Alpine.plugin(focus);
 
+Alpine.data('attendanceRegister', attendance);
 Alpine.data('broadsheet', broadsheet);
+Alpine.data('quizBuilder', quizBuilder);
+Alpine.data('quizTaker', quizTaker);
 Alpine.data('importProgress', importProgress);
 Alpine.data('remarksBook', remarks);
 Alpine.data('scorebook', scorebook);
@@ -79,3 +86,11 @@ window.Alpine = Alpine;
 Alpine.start();
 
 initMotion();
+
+// Inside the app, pages swap in place instead of reloading (see navigation.js).
+startNavigation(() => {
+    document.documentElement.style.removeProperty('overflow');
+    document.documentElement.style.removeProperty('padding-right');
+    ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
+    initMotion();
+});

@@ -118,9 +118,12 @@
             <div class="rounded-xl border border-line p-4">
                 <div class="text-xs font-semibold tracking-wide text-muted uppercase">Attendance</div>
                 <dl class="m-0 mt-2 grid grid-cols-[1fr_auto] gap-y-1">
-                    <dt class="text-muted">Times school opened</dt><dd class="m-0 text-right font-semibold">{{ $term->school_days ?? '—' }}</dd>
-                    <dt class="text-muted">Times present</dt><dd class="m-0 text-right font-semibold">{{ $report?->days_present ?? '—' }}</dd>
-                    <dt class="text-muted">Times absent</dt><dd class="m-0 text-right font-semibold">{{ $term->school_days !== null && $report?->days_present !== null ? max(0, $term->school_days - $report->days_present) : '—' }}</dd>
+                    {{-- Typed on the remarks page, or else counted from the class register. --}}
+                    @php($opened = $term->school_days ?? ($registerDays ?: null))
+                    @php($present = $report?->days_present ?? ($register['days'] > 0 ? $register['present'] + $register['late'] : null))
+                    <dt class="text-muted">Times school opened</dt><dd class="m-0 text-right font-semibold">{{ $opened ?? '—' }}</dd>
+                    <dt class="text-muted">Times present</dt><dd class="m-0 text-right font-semibold">{{ $present ?? '—' }}</dd>
+                    <dt class="text-muted">Times absent</dt><dd class="m-0 text-right font-semibold">{{ $opened !== null && $present !== null ? max(0, $opened - $present) : '—' }}</dd>
                 </dl>
             </div>
             @foreach ($traits->groupBy(fn ($trait) => $trait->category->value) as $group)

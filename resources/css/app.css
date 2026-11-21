@@ -92,6 +92,11 @@
 }
 
 @layer components {
+    /* Thin bar at the top while an in-app page loads (navigation.js). */
+    .nav-progress {
+        @apply pointer-events-none fixed inset-x-0 top-0 z-[100] h-[3px] origin-left bg-brand-600;
+    }
+
     .kicker {
         @apply text-[13px] font-semibold uppercase tracking-kicker text-brand-600;
     }

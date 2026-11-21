@@ -42,8 +42,9 @@ class GenerateInvoices
         $enrolments = Enrolment::query()
             ->with('student')
             ->where('academic_session_id', $term->academic_session_id)
-            ->where('status', EnrolmentStatus::Active)
-            ->whereHas('student', fn ($query) => $query->where('status', StudentStatus::Active))
+            // Everyone who was in the class that session, including those since promoted or graduated.
+            ->where('status', '!=', EnrolmentStatus::Withdrawn)
+            ->whereHas('student', fn ($query) => $query->whereNotIn('status', [StudentStatus::Withdrawn, StudentStatus::Transferred]))
             ->get()
             ->filter(fn (Enrolment $enrolment) => $classLevelIds === null || in_array($levelOfArm[$enrolment->class_arm_id] ?? null, $classLevelIds, true));
 

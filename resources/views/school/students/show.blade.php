@@ -78,7 +78,7 @@
                 @forelse ($resultTerms as $resultTerm)
                     <div class="flex items-center justify-between gap-3 border-b border-line px-6 py-3 last:border-b-0">
                         <span class="font-medium">{{ $resultTerm->name }} · {{ $resultTerm->academicSession->name }}</span>
-                        <a href="{{ route('school.results.report', [$student, 'term' => $resultTerm->id]) }}" class="inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:text-ink">Report card <x-lucide-arrow-right class="size-4" aria-hidden="true" /></a>
+                        <a data-native href="{{ route('school.results.report', [$student, 'term' => $resultTerm->id]) }}" class="inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:text-ink">Report card <x-lucide-arrow-right class="size-4" aria-hidden="true" /></a>
                     </div>
                 @empty
                     <x-empty-state icon="file-text" title="No scores yet" />

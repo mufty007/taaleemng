@@ -74,7 +74,7 @@
                                 <td class="px-5 py-3">
                                     <div class="flex justify-end gap-1">
                                         @if (in_array($payment->status, [PaymentStatus::Confirmed, PaymentStatus::Reversed], true))
-                                            <x-button variant="ghost" size="sm" icon="printer" :href="route('school.payments.receipt', $payment)">Receipt</x-button>
+                                            <x-button data-native variant="ghost" size="sm" icon="printer" :href="route('school.payments.receipt', $payment)">Receipt</x-button>
                                         @endif
                                         @can('payments.record')
                                             @if ($payment->status === PaymentStatus::Confirmed)

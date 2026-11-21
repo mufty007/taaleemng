@@ -202,6 +202,8 @@ class DatabaseSeeder extends Seeder
             );
             $b->scores();
             $b->reportRemarks();
+            $b->attendance();
+            $b->fees(['nursery' => 120_000, 'primary' => 145_000, 'junior' => 185_000, 'senior' => 210_000]);
             $b->applicants(
                 ['submitted' => 7, 'screening' => 3, 'exam_scheduled' => 6, 'offered' => 4, 'accepted' => 2, 'rejected' => 2, 'withdrawn' => 1],
                 ['Nursery 1', 'Primary 1', 'Primary 4', 'JSS 1', 'JSS 1', 'SSS 1'],
@@ -261,6 +263,8 @@ class DatabaseSeeder extends Seeder
             );
             $b->scores();
             $b->reportRemarks();
+            $b->attendance();
+            $b->fees(['nursery' => 60_000, 'primary' => 75_000, 'islamiyya' => 40_000]);
         });
 
         return $school;

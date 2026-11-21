@@ -5,6 +5,7 @@ use App\Enums\SchoolRole;
 use App\Models\AcademicSession;
 use App\Models\Applicant;
 use App\Models\AssessmentComponent;
+use App\Models\AttendanceRecord;
 use App\Models\ClassLevel;
 use App\Models\CommentTemplate;
 use App\Models\FeeItem;
@@ -78,6 +79,14 @@ dataset('tenant models', [
         'status' => 'submitted', 'source' => 'online', 'first_name' => 'Zainab', 'last_name' => 'Yusuf', 'gender' => 'female',
         'guardian_first_name' => 'Halima', 'guardian_last_name' => 'Yusuf', 'guardian_relationship' => 'mother', 'guardian_phone' => '+2348055551212',
     ])],
+    'attendance records' => [function () {
+        $invoice = isolationInvoice();
+
+        return AttendanceRecord::query()->create([
+            'term_id' => $invoice->term_id, 'class_arm_id' => $invoice->enrolment->class_arm_id, 'enrolment_id' => $invoice->enrolment_id,
+            'date' => '2026-09-15', 'status' => 'present',
+        ]);
+    }],
     'fee items' => [fn () => FeeItem::query()->create(['name' => 'Tuition'])],
     'fee structures' => [fn () => FeeStructure::query()->create([
         'term_id' => isolationInvoice()->term_id,

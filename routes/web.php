@@ -68,6 +68,35 @@ Route::middleware('auth')->group(function () {
             Route::post('/portal/invoices/{invoice}/pay', [Portal\FeeController::class, 'pay'])->name('portal.invoices.pay');
             Route::get('/portal/payments/callback', [Portal\FeeController::class, 'callback'])->name('portal.payments.callback');
 
+            // Classwork: assignments, quizzes and CBT exams
+            Route::middleware('can:scores.enter')->prefix('/classwork')->name('classwork.')->group(function () {
+                Route::get('/', [School\ClassworkController::class, 'index'])->name('index');
+                Route::post('/quizzes', [School\ClassworkController::class, 'storeQuiz'])->name('quizzes.store');
+                Route::get('/quizzes/{quiz}', [School\ClassworkController::class, 'editQuiz'])->name('quizzes.edit');
+                Route::patch('/quizzes/{quiz}', [School\ClassworkController::class, 'updateQuiz'])->name('quizzes.update');
+                Route::put('/quizzes/{quiz}/questions', [School\ClassworkController::class, 'saveQuestions'])->name('quizzes.questions');
+                Route::post('/quizzes/{quiz}/publish', [School\ClassworkController::class, 'togglePublish'])->name('quizzes.publish');
+                Route::get('/quizzes/{quiz}/results', [School\ClassworkController::class, 'quizResults'])->name('quizzes.results');
+                Route::post('/quizzes/{quiz}/scorebook', [School\ClassworkController::class, 'sendToScorebook'])->name('quizzes.scorebook');
+                Route::post('/assignments', [School\ClassworkController::class, 'storeAssignment'])->name('assignments.store');
+                Route::get('/assignments/{assignment}', [School\ClassworkController::class, 'showAssignment'])->name('assignments.show');
+                Route::patch('/submissions/{submission}', [School\ClassworkController::class, 'markSubmission'])->name('submissions.mark');
+            });
+            Route::get('/portal/classwork', [Portal\ClassworkController::class, 'index'])->name('portal.classwork');
+            Route::get('/portal/assignments/{assignment}', [Portal\ClassworkController::class, 'assignment'])->name('portal.assignments.show');
+            Route::post('/portal/assignments/{assignment}', [Portal\ClassworkController::class, 'submitAssignment'])->name('portal.assignments.submit');
+            Route::get('/portal/quizzes/{quiz}', [Portal\ClassworkController::class, 'quiz'])->name('portal.quizzes.show');
+            Route::post('/portal/quizzes/{quiz}/start', [Portal\ClassworkController::class, 'start'])->name('portal.quizzes.start');
+            Route::put('/portal/quizzes/{quiz}/answers', [Portal\ClassworkController::class, 'answer'])->name('portal.quizzes.answer');
+            Route::post('/portal/quizzes/{quiz}/submit', [Portal\ClassworkController::class, 'submit'])->name('portal.quizzes.submit');
+
+            // Attendance
+            Route::middleware('can:attendance.take')->group(function () {
+                Route::get('/attendance', [School\AttendanceController::class, 'index'])->name('attendance.index');
+                Route::get('/attendance/{classArm}', [School\AttendanceController::class, 'register'])->name('attendance.register');
+                Route::put('/attendance/{classArm}', [School\AttendanceController::class, 'save'])->name('attendance.save');
+            });
+
             // Fees
             Route::middleware('can:fees.manage')->group(function () {
                 Route::get('/fees/setup', [School\FeeSetupController::class, 'index'])->name('fees.setup');

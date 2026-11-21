@@ -3,12 +3,20 @@
 namespace App\Http\Controllers\Portal;
 
 use App\Actions\Fees\AllocatePayments;
+use App\Enums\ClassworkStatus;
 use App\Enums\InvoiceStatus;
 use App\Enums\PaymentStatus;
 use App\Http\Controllers\Controller;
+use App\Models\Assignment;
+use App\Models\AssignmentSubmission;
+use App\Models\AttendanceRecord;
+use App\Models\ClassSubject;
+use App\Models\Quiz;
+use App\Models\QuizAttempt;
 use App\Models\ResultPublication;
 use App\Models\Student;
 use App\Models\Term;
+use App\Support\Attendance\AttendanceSummary;
 use App\Support\Payments\Paystack;
 use App\Support\Results\ResultCalculator;
 use Illuminate\Contracts\View\View;
@@ -54,6 +62,28 @@ class PortalController extends Controller
         abort_unless($request->user()->guardianRecord()?->students()->whereKey($student->id)->exists(), 404);
 
         return $this->studentView($student, Term::current(), ownProfile: false);
+    }
+
+    /**
+     * This term's register and classwork for the student, for both portals.
+     *
+     * @return array<string, mixed>
+     */
+    private function attendanceAndWork(Student $student, ?Term $term): array
+    {
+        $enrolment = $student->currentEnrolment;
+        $subjectIds = $enrolment ? ClassSubject::query()->where('class_arm_id', $enrolment->class_arm_id)->pluck('id') : collect();
+
+        return [
+            'attendance' => $term && $enrolment ? AttendanceSummary::forTerm($term, [$enrolment->id])[$enrolment->id] : null,
+            'recentAttendance' => $enrolment ? AttendanceRecord::query()->where('enrolment_id', $enrolment->id)->latest('date')->limit(15)->get() : collect(),
+            'assignments' => Assignment::query()->with('classSubject.subject')->whereIn('class_subject_id', $subjectIds)
+                ->where('status', ClassworkStatus::Published)->latest('due_at')->limit(20)->get(),
+            'submissions' => AssignmentSubmission::query()->where('student_id', $student->id)->get()->keyBy('assignment_id'),
+            'quizzes' => Quiz::query()->with('classSubject.subject')->whereIn('class_subject_id', $subjectIds)
+                ->where('status', ClassworkStatus::Published)->latest()->limit(20)->get(),
+            'quizAttempts' => QuizAttempt::query()->where('student_id', $student->id)->get()->keyBy('quiz_id'),
+        ];
     }
 
     private function studentView(Student $student, ?Term $term, bool $ownProfile): View
@@ -102,6 +132,7 @@ class PortalController extends Controller
             'payments' => $student->payments()->where('status', PaymentStatus::Confirmed)->latest('paid_at')->limit(10)->get(),
             'balance' => AllocatePayments::balance($student),
             'canPayOnline' => ! $ownProfile && app(Paystack::class)->isConfigured(),
+            ...$this->attendanceAndWork($student, $term),
             'publishedResults' => collect($publishedResults)->sortByDesc(fn (array $result) => $result['term']->starts_on)->values(),
         ]);
     }

@@ -7,7 +7,7 @@
 
     <x-page-header kicker="People" title="Import students" description="Enrol a whole class, or the whole school, from a spreadsheet. Nothing is saved until you have seen what will be imported.">
         <x-slot:actions>
-            <x-button variant="secondary" icon="download" :href="route('school.students.import.template')">Download template</x-button>
+            <x-button data-native variant="secondary" icon="download" :href="route('school.students.import.template')">Download template</x-button>
         </x-slot:actions>
     </x-page-header>
 

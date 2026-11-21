@@ -97,7 +97,7 @@
                             <div class="text-xs text-muted">{{ $payment->paid_at?->format('j M Y') }} · {{ $payment->receipt_no }}</div>
                         </div>
                         @if ($payment->status === PaymentStatus::Confirmed)
-                            <a href="{{ route('school.payments.receipt', $payment) }}" class="text-sm font-semibold text-brand-600 hover:text-ink">Receipt</a>
+                            <a data-native href="{{ route('school.payments.receipt', $payment) }}" class="text-sm font-semibold text-brand-600 hover:text-ink">Receipt</a>
                         @endif
                     </div>
                 @empty

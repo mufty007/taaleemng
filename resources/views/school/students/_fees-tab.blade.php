@@ -54,7 +54,7 @@
                 </div>
                 <x-badge :tone="$payment->status->tone()">{{ $payment->status->label() }}</x-badge>
                 @if (in_array($payment->status, [PaymentStatus::Confirmed, PaymentStatus::Reversed], true))
-                    <a href="{{ route('school.payments.receipt', $payment) }}" class="text-sm font-semibold text-brand-600 hover:text-ink">Receipt</a>
+                    <a data-native href="{{ route('school.payments.receipt', $payment) }}" class="text-sm font-semibold text-brand-600 hover:text-ink">Receipt</a>
                 @endif
             </div>
         @empty

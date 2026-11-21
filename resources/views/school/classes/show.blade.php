@@ -5,6 +5,13 @@
         :description="($session ? $session->name.' · ' : '').$enrolments->count().' students · '.$classArm->classSubjects->count().' subjects'"
     >
         <x-slot:actions>
+            @if ($canRegister)
+                <x-button variant="secondary" icon="clipboard-check" :href="route('school.attendance.register', $classArm)">Take register</x-button>
+            @endif
+            @if ($myClassSubjectId)
+                <x-button variant="secondary" icon="notebook-pen" :href="route('school.classwork.index', ['class_subject' => $myClassSubjectId, 'new' => 'assignment'])">New assignment</x-button>
+                <x-button icon="monitor-check" :href="route('school.classwork.index', ['class_subject' => $myClassSubjectId, 'new' => 'quiz'])">New quiz</x-button>
+            @endif
             <x-button variant="secondary" icon="users" :href="route('school.students.index', ['class' => $classArm->ulid])">Student list</x-button>
         </x-slot:actions>
     </x-page-header>

@@ -18,7 +18,7 @@
     };
 @endphp
 
-<x-layouts.base :title="$title">
+<x-layouts.base :title="$title" data-app-shell>
     <x-slot:head>
         <script>try { if (JSON.parse(localStorage.getItem('sidebar.rail'))) document.documentElement.classList.add('sidebar-rail'); } catch (e) {}</script>
     </x-slot:head>

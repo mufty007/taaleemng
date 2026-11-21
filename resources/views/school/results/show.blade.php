@@ -16,7 +16,7 @@
         <x-slot:actions>
             <form method="GET">
                 <label for="term" class="sr-only">Term</label>
-                <select id="term" name="term" class="field w-60 bg-white py-2" x-data x-on:change="$el.form.submit()">
+                <select id="term" name="term" class="field w-60 bg-white py-2" x-data x-on:change="$el.form.requestSubmit()">
                     @foreach ($terms as $id => $label)<option value="{{ $id }}" @selected($term->id === $id)>{{ $label }}</option>@endforeach
                 </select>
             </form>
@@ -61,7 +61,7 @@
                                     <td class="px-3 py-3 text-right font-semibold">{{ $row['average'] ?? '—' }}</td>
                                     <td class="px-5 py-3 text-right">
                                         @if ($row['subject_count'] > 0)
-                                            <a href="{{ route('school.results.report', [$row['student'], 'term' => $term->id]) }}" class="inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:text-ink">Report card <x-lucide-arrow-right class="size-4" aria-hidden="true" /></a>
+                                            <a data-native href="{{ route('school.results.report', [$row['student'], 'term' => $term->id]) }}" class="inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:text-ink">Report card <x-lucide-arrow-right class="size-4" aria-hidden="true" /></a>
                                         @endif
                                     </td>
                                 </tr>

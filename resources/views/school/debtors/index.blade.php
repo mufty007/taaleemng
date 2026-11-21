@@ -5,7 +5,7 @@
 <x-layouts.app title="Debtors">
     <x-page-header kicker="Finance" title="Debtors" :description="$rows->count().' '.str('student')->plural($rows->count()).' owe '.Money::format($total).' in total.'">
         <x-slot:actions>
-            <x-button variant="secondary" icon="download" :href="route('school.debtors.index', array_filter(['class' => $armId, 'export' => 'csv']))">Download CSV</x-button>
+            <x-button data-native variant="secondary" icon="download" :href="route('school.debtors.index', array_filter(['class' => $armId, 'export' => 'csv']))">Download CSV</x-button>
         </x-slot:actions>
     </x-page-header>
 
@@ -13,7 +13,7 @@
         <form method="GET" class="flex flex-wrap items-end gap-3 border-b border-line px-5 py-4">
             <div class="flex w-48 flex-col gap-1.5">
                 <label for="class" class="text-sm font-semibold">Class</label>
-                <select id="class" name="class" class="field" x-data x-on:change="$el.form.submit()">
+                <select id="class" name="class" class="field" x-data x-on:change="$el.form.requestSubmit()">
                     <option value="">All classes</option>
                     @foreach ($arms as $id => $name)<option value="{{ $id }}" @selected($armId === $id)>{{ $name }}</option>@endforeach
                 </select>

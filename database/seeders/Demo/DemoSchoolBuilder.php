@@ -6,12 +6,16 @@ use App\Actions\Academic\AddClassArm;
 use App\Actions\Academic\ApplyNigerianDefaults;
 use App\Actions\Academic\StartSession;
 use App\Actions\Admissions\SubmitApplication;
+use App\Actions\Fees\GenerateInvoices;
+use App\Actions\Fees\RecordPayment;
+use App\Actions\Fees\StartOnlinePayment;
 use App\Actions\People\AddStaffMember;
 use App\Actions\People\EnrolStudent;
 use App\Enums\ApplicantStatus;
 use App\Enums\ClassSection;
 use App\Enums\CommentAudience;
 use App\Enums\EnrolmentStatus;
+use App\Enums\PaymentMethod;
 use App\Enums\SchoolRole;
 use App\Enums\TermStatus;
 use App\Models\AcademicSession;
@@ -20,7 +24,10 @@ use App\Models\ClassArm;
 use App\Models\ClassLevel;
 use App\Models\ClassSubject;
 use App\Models\Enrolment;
+use App\Models\FeeItem;
+use App\Models\FeeStructure;
 use App\Models\Guardian;
+use App\Models\Invoice;
 use App\Models\ReportTrait;
 use App\Models\ResultPublication;
 use App\Models\School;
@@ -416,6 +423,145 @@ final class DemoSchoolBuilder
 
         if ($rows !== []) {
             DB::table('term_reports')->insert($rows);
+        }
+    }
+
+    /**
+     * Fee items and a schedule for every term, invoices for last session and
+     * this term, and payments: last session almost all paid, this term a mix of
+     * paid, part paid and not yet paid, by transfer, cash, POS and online.
+     *
+     * @param  array<string, int>  $tuitionBySection  naira per term, by class section
+     */
+    public function fees(array $tuitionBySection): void
+    {
+        mt_srand(7070 + $this->school->id);
+
+        $items = collect(FeeItem::NIGERIAN_DEFAULTS)->mapWithKeys(fn (string $name, int $index) => [$name => FeeItem::query()->create(['name' => $name, 'position' => $index + 1])]);
+        $bus = FeeItem::query()->create(['name' => 'School bus', 'is_optional' => true, 'position' => 20]);
+        $terms = Term::query()->with('academicSession')->orderBy('starts_on')->get();
+        $current = Term::current();
+
+        foreach ($terms as $term) {
+            foreach (ClassLevel::query()->get() as $level) {
+                $naira = [
+                    'Tuition' => $tuitionBySection[$level->section->value] ?? 150_000,
+                    'Development levy' => $term->sequence === 1 ? 25_000 : 0,
+                    'PTA levy' => 5_000,
+                    'Books & stationery' => $term->sequence === 1 ? 18_000 : 0,
+                    'Exam fee' => in_array($level->name, ['JSS 3', 'SSS 3'], true) && $term->sequence === 2 ? 35_000 : 7_500,
+                    'Sports & clubs' => 5_000,
+                ];
+
+                foreach ($naira as $name => $amount) {
+                    if ($amount > 0) {
+                        FeeStructure::query()->create(['term_id' => $term->id, 'class_level_id' => $level->id, 'fee_item_id' => $items[$name]->id, 'amount' => $amount * 100]);
+                    }
+                }
+
+                FeeStructure::query()->create(['term_id' => $term->id, 'class_level_id' => $level->id, 'fee_item_id' => $bus->id, 'amount' => 40_000_00]);
+            }
+        }
+
+        foreach ($terms->filter(fn (Term $term) => ! $term->starts_on->isFuture()) as $term) {
+            app(GenerateInvoices::class)->handle($term);
+            Invoice::query()->where('term_id', $term->id)->update([
+                'issued_at' => $term->starts_on->copy()->subWeek(),
+                'due_on' => $term->starts_on->copy()->addWeeks(2),
+            ]);
+        }
+
+        $record = app(RecordPayment::class);
+        $bursar = $this->staffMember('bursar')->user;
+
+        foreach (Invoice::query()->with(['student', 'term'])->orderBy('issued_at')->orderBy('id')->get() as $invoice) {
+            $roll = mt_rand(1, 100);
+            $share = $invoice->term_id === $current->id
+                ? match (true) {
+                    $roll <= 55 => 1.0, $roll <= 80 => mt_rand(35, 85) / 100, default => 0.0
+                }
+            : ($roll <= 98 ? 1.0 : mt_rand(40, 80) / 100);
+            $amount = $share === 1.0 ? $invoice->total : (int) (round($invoice->total * $share / 100_000) * 100_000);
+
+            if ($amount <= 0) {
+                continue;
+            }
+
+            $instalments = $share === 1.0 && mt_rand(1, 100) <= 30 ? [(int) (round($amount * 0.6 / 100_000) * 100_000)] : [];
+            $instalments[] = $amount - array_sum($instalments);
+
+            foreach ($instalments as $index => $instalment) {
+                $paidAt = $invoice->term->starts_on->copy()->subDays(5)->addDays(mt_rand(0, 20) + $index * 30)->setTime(mt_rand(8, 16), mt_rand(0, 59));
+
+                if ($paidAt->isFuture()) {
+                    $paidAt = now()->subDays(mt_rand(1, 6));
+                }
+
+                $method = $this->people->pick([PaymentMethod::Transfer, PaymentMethod::Transfer, PaymentMethod::Transfer, PaymentMethod::Cash, PaymentMethod::Cash, PaymentMethod::Pos, PaymentMethod::Paystack]);
+                $reference = match ($method) {
+                    PaymentMethod::Transfer => $this->people->pick(['GTB', 'ZEN', 'UBA', 'ACC', 'FBN', 'OPY']).'-'.mt_rand(100000, 999999),
+                    PaymentMethod::Pos => 'POS '.mt_rand(10000, 99999),
+                    PaymentMethod::Paystack => StartOnlinePayment::reference($this->school->id),
+                    default => null,
+                };
+
+                $record->handle($invoice->student, $instalment, $method, $paidAt, $bursar, $reference);
+            }
+        }
+    }
+
+    /**
+     * The class register for every school day of this term so far (mid-term
+     * break excluded). Most students are there most days; a few are often late.
+     */
+    public function attendance(): void
+    {
+        mt_srand(9090 + $this->school->id);
+
+        $term = Term::current();
+        $days = [];
+
+        for ($day = $term->starts_on->copy(); $day->lt(today()); $day->addDay()) {
+            $onBreak = $term->mid_term_starts_on && $day->between($term->mid_term_starts_on, $term->mid_term_ends_on ?? $term->mid_term_starts_on);
+
+            if (! $day->isWeekend() && ! $onBreak) {
+                $days[] = $day->toDateString();
+            }
+        }
+
+        $now = now();
+        $rows = [];
+
+        foreach (Enrolment::query()->where('academic_session_id', $term->academic_session_id)->get(['id', 'class_arm_id', 'student_id']) as $enrolment) {
+            $habit = ($enrolment->student_id * 37) % 10;
+
+            foreach ($days as $date) {
+                $roll = mt_rand(1, 100);
+                $rows[] = [
+                    'school_id' => $this->school->id,
+                    'term_id' => $term->id,
+                    'class_arm_id' => $enrolment->class_arm_id,
+                    'enrolment_id' => $enrolment->id,
+                    'date' => $date,
+                    'status' => match (true) {
+                        $roll <= 88 - $habit => 'present',
+                        $roll <= 94 - $habit / 2 => 'late',
+                        $roll <= 99 => 'absent',
+                        default => 'excused',
+                    },
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+
+                if (count($rows) >= 2000) {
+                    DB::table('attendance_records')->insert($rows);
+                    $rows = [];
+                }
+            }
+        }
+
+        if ($rows !== []) {
+            DB::table('attendance_records')->insert($rows);
         }
     }
 

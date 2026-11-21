@@ -3,7 +3,7 @@
         <x-slot:actions>
             <form method="GET">
                 <label for="from" class="sr-only">Session to move from</label>
-                <select id="from" name="from" class="field w-56 bg-white py-2" x-data x-on:change="$el.form.submit()">
+                <select id="from" name="from" class="field w-56 bg-white py-2" x-data x-on:change="$el.form.requestSubmit()">
                     @foreach ($sessions as $id => $name)<option value="{{ $id }}" @selected($from->id === $id)>From {{ $name }}</option>@endforeach
                 </select>
             </form>

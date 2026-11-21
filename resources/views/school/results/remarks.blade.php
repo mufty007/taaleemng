@@ -23,7 +23,7 @@
             <x-slot:actions>
                 <form method="GET">
                     <label for="term" class="sr-only">Term</label>
-                    <select id="term" name="term" class="field w-60 bg-white py-2" x-data x-on:change="$el.form.submit()">
+                    <select id="term" name="term" class="field w-60 bg-white py-2" x-data x-on:change="$el.form.requestSubmit()">
                         @foreach ($terms as $id => $label)<option value="{{ $id }}" @selected($term->id === $id)>{{ $label }}</option>@endforeach
                     </select>
                 </form>
