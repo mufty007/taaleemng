@@ -1,8 +1,9 @@
 <x-layouts.app title="Account & security">
     <x-page-header kicker="Your account" title="Account & security" description="These details are yours, not your school’s. They apply in every school you belong to." />
 
-    <div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        {{-- Profile --}}
+    @php($accountTab = $errors->updatePassword->isNotEmpty() ? 'password' : (str_contains((string) session('status'), 'two-factor') || str_contains((string) session('status'), 'recovery') || $errors->confirmTwoFactorAuthentication->isNotEmpty() ? 'security' : 'profile'))
+    <x-tabs :tabs="['profile' => 'Profile', 'password' => 'Password', 'security' => 'Two-step verification']" :default="$accountTab" label="Account settings" class="max-w-3xl">
+        <x-tab name="profile">
         <x-card>
             <h2 class="m-0 text-lg font-semibold">Profile</h2>
             <p class="m-0 mt-1 mb-5 text-sm text-muted">You can log in with either your email address or your phone number.</p>
@@ -15,8 +16,9 @@
                 <x-button class="self-start">Save profile</x-button>
             </form>
         </x-card>
+        </x-tab>
 
-        {{-- Password --}}
+        <x-tab name="password">
         <x-card>
             <h2 class="m-0 text-lg font-semibold">Password</h2>
             <p class="m-0 mt-1 mb-5 text-sm text-muted">Use at least 8 characters. Don’t reuse a password from another website.</p>
@@ -29,9 +31,10 @@
                 <x-button class="self-start">Change password</x-button>
             </form>
         </x-card>
+        </x-tab>
 
-        {{-- Two-step verification --}}
-        <x-card class="lg:col-span-2">
+        <x-tab name="security">
+        <x-card>
             <div class="flex flex-wrap items-start justify-between gap-4">
                 <div class="flex items-start gap-4">
                     <span class="grid size-11 flex-none place-items-center rounded-xl bg-brand-50 text-brand-600">
@@ -104,5 +107,6 @@
                 @endif
             </div>
         </x-card>
-    </div>
+        </x-tab>
+    </x-tabs>
 </x-layouts.app>

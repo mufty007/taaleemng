@@ -6,9 +6,3 @@ parameters:
         - app/
     level: 6
 
-    ignoreErrors:
-        # SchoolAware is for queued jobs; the first ones arrive with Phase 3 (report card PDFs).
-        # Until then it is only exercised by tests/Feature/Tenancy/TenantIsolationTest.php.
-        -
-            identifier: trait.unused
-            path: app/Support/Tenancy/SchoolAware.php

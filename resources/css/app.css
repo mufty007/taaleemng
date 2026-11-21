@@ -4,6 +4,9 @@
 @source '../../storage/framework/views/*.php';
 @source '../../app/Support/**/*.php';
 
+/* Sidebar collapsed to an icon rail (class set on <html> before paint, see layouts/app). */
+@custom-variant rail (&:where(.sidebar-rail *));
+
 /*
  * Ta'aleem design tokens, taken from the landing page design.
  * brand    – periwinkle primary (#7476F1); use brand-600 for text on light backgrounds (contrast).

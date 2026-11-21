@@ -45,6 +45,12 @@ class EnsureSchoolContext
 
     private function touchMembership(Request $request, School $school): void
     {
+        // The first visit to a school in each login session is recorded for the school's activity log.
+        if (! $request->session()->has("school.{$school->id}.entered")) {
+            activity('auth')->causedBy($request->user())->log('signed in to the school');
+            $request->session()->put("school.{$school->id}.entered", true);
+        }
+
         $key = "school.{$school->id}.last_active_touched";
 
         if ($request->session()->get($key, 0) > now()->subMinutes(5)->getTimestamp()) {

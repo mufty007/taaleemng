@@ -1,17 +1,40 @@
 <?php
 
 use App\Enums\SchoolRole;
+use App\Models\ClassArm;
 use Spatie\Activitylog\Models\Activity;
 
-it('greets the user and shows the setup checklist', function () {
+it('greets the user and shows the school admin a setup checklist', function () {
     $school = schoolWithRoles(['name' => 'Greenfield Academy']);
-    $user = memberOf($school, SchoolRole::Principal, ['name' => 'Funke Adebayo']);
+    $admin = memberOf($school, SchoolRole::SchoolAdmin, ['name' => 'Ngozi Okafor']);
+    $principal = memberOf($school, SchoolRole::Principal, ['name' => 'Funke Adebayo']);
 
-    $this->actingAs($user)->get(route('school.dashboard', $school))
+    $this->actingAs($admin)->get(route('school.dashboard', $school))
         ->assertOk()
-        ->assertSee('Funke')
-        ->assertSee('Principal / Head Teacher')
+        ->assertSee('Ngozi')
         ->assertSee('Get your school ready');
+
+    $this->actingAs($principal)->get(route('school.dashboard', $school))
+        ->assertOk()
+        ->assertSee('Principal / Head Teacher')
+        ->assertDontSee('Get your school ready');
+});
+
+it('shows a teacher their own classes and numbers', function () {
+    $school = schoolWithStructure();
+    $teacher = staffOf($school);
+    enrol($school, 'JSS 1', 'A');
+    enrol($school, 'SSS 2', 'A');
+
+    inSchool($school, fn () => ClassArm::query()
+        ->whereHas('level', fn ($query) => $query->where('name', 'JSS 1'))->where('name', 'A')->sole()
+        ->update(['form_teacher_id' => $teacher->id]));
+
+    $this->actingAs($teacher->user)->get(route('school.dashboard', $school))
+        ->assertOk()
+        ->assertSee('My classes')
+        ->assertSee('My students')
+        ->assertSee('Form teacher');
 });
 
 it('only shows sidebar modules the role is allowed to use', function () {
@@ -21,7 +44,7 @@ it('only shows sidebar modules the role is allowed to use', function () {
     $teacher = memberOf($school, SchoolRole::Teacher);
 
     $this->actingAs($bursar)->get(route('school.dashboard', $school))
-        ->assertSee('School fees')
+        ->assertSee('Debtors')
         ->assertDontSee('Score entry');
 
     $this->actingAs($teacher)->get(route('school.dashboard', $school))

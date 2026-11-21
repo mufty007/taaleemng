@@ -6,7 +6,10 @@ use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
 use App\Actions\Fortify\UpdateUserPassword;
 use App\Actions\Fortify\UpdateUserProfileInformation;
+use App\Models\School;
+use App\Models\Student;
 use App\Models\User;
+use App\Support\Tenancy\CurrentSchool;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -43,13 +46,16 @@ class FortifyServiceProvider extends ServiceProvider
         Fortify::twoFactorChallengeView(fn () => view('auth.two-factor-challenge'));
         Fortify::confirmPasswordView(fn () => view('auth.confirm-password'));
 
-        // Staff and parents sign in with either their email address or their phone number.
+        // Staff and parents sign in with their email address or phone number.
+        // Students sign in with their school code and admission number.
         Fortify::authenticateUsing(function (Request $request): ?User {
-            $login = Str::lower(trim((string) $request->input(Fortify::username())));
+            $login = trim((string) $request->input(Fortify::username()));
 
-            $user = str_contains($login, '@')
-                ? User::query()->where('email', $login)->first()
-                : User::query()->where('phone', User::normalisePhone($login) ?? $login)->first();
+            $user = match (true) {
+                $request->filled('school_code') => $this->studentUser((string) $request->input('school_code'), $login),
+                str_contains($login, '@') => User::query()->where('email', Str::lower($login))->first(),
+                default => User::query()->where('phone', User::normalisePhone($login) ?? $login)->first(),
+            };
 
             return $user && Hash::check((string) $request->input('password'), $user->password) ? $user : null;
         });
@@ -75,5 +81,24 @@ class FortifyServiceProvider extends ServiceProvider
         RateLimiter::for('demo-requests', function (Request $request) {
             return Limit::perHour(10)->by($request->ip());
         });
+
+        RateLimiter::for('applications', function (Request $request) {
+            return Limit::perHour(20)->by($request->ip());
+        });
+    }
+
+    private function studentUser(string $schoolCode, string $admissionNo): ?User
+    {
+        $school = School::query()->where('short_code', Str::upper(trim($schoolCode)))->first();
+
+        if ($school === null) {
+            return null;
+        }
+
+        $userId = app(CurrentSchool::class)->run($school, fn () => Student::query()
+            ->where('admission_no', Str::upper($admissionNo))
+            ->value('user_id'));
+
+        return $userId ? User::query()->find($userId) : null;
     }
 }

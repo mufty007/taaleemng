@@ -52,7 +52,7 @@
                                     @endif
                                 </td>
                                 <td class="px-5 py-3.5 text-right">
-                                    <a href="{{ route('school.dashboard', $school) }}" class="inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:text-ink">Open <x-lucide-arrow-right class="size-4" aria-hidden="true" /></a>
+                                    <a href="{{ route('platform.schools.show', $school) }}" class="inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:text-ink">Details <x-lucide-arrow-right class="size-4" aria-hidden="true" /></a>
                                 </td>
                             </tr>
                         @endforeach

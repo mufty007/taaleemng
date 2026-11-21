@@ -32,6 +32,8 @@ return [
         'currency' => 'NGN',
         'date_format' => 'd/m/Y',
         'show_positions' => true,
+        'promotion_pass_mark' => 40,
+        'admissions_open' => true,
     ],
 
     /*

@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\Term;
 use App\Models\User;
 use App\Support\Tenancy\CurrentSchool;
 use Illuminate\Auth\Events\Login;
@@ -50,6 +51,7 @@ class AppServiceProvider extends ServiceProvider
 
         View::composer('components.layouts.app', function ($view): void {
             $view->with('switchableSchools', auth()->user()?->activeSchools()->orderBy('name')->get() ?? collect());
+            $view->with('currentTerm', $this->app->make(CurrentSchool::class)->check() ? Term::current() : null);
         });
     }
 }

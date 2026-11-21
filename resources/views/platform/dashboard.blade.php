@@ -40,7 +40,7 @@
                 <a href="{{ route('platform.schools.index') }}" class="text-sm font-semibold text-brand-600 hover:text-ink">View all</a>
             </div>
             @forelse ($recentSchools as $school)
-                <a href="{{ route('school.dashboard', $school) }}" class="flex items-center gap-3 border-b border-line px-6 py-3.5 last:border-b-0 hover:bg-canvas">
+                <a href="{{ route('platform.schools.show', $school) }}" class="flex items-center gap-3 border-b border-line px-6 py-3.5 last:border-b-0 hover:bg-canvas">
                     <span class="grid size-9 flex-none place-items-center rounded-lg bg-brand-50 text-sm font-bold text-brand-600">{{ $school->initials() }}</span>
                     <div class="min-w-0 flex-1">
                         <div class="truncate font-semibold">{{ $school->name }}</div>

@@ -18,14 +18,17 @@ class SequenceGenerator
 {
     public function __construct(private CurrentSchool $currentSchool) {}
 
-    public function next(string $key): string
+    /**
+     * @param  Carbon|null  $date  The document's own date (e.g. a backdated admission); defaults to today.
+     */
+    public function next(string $key, ?Carbon $date = null): string
     {
         $school = $this->currentSchool->getOrFail(NumberSequence::class);
 
-        return DB::transaction(function () use ($key, $school): string {
+        return DB::transaction(function () use ($key, $school, $date): string {
             $sequence = $this->lockedSequence($key);
 
-            $number = $this->format($sequence->pattern, $sequence->next_value, $school->short_code);
+            $number = $this->format($sequence->pattern, $sequence->next_value, $school->short_code, $date);
             $sequence->increment('next_value');
 
             return $number;

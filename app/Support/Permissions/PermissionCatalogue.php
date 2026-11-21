@@ -31,7 +31,8 @@ final class PermissionCatalogue
             ],
             'People' => [
                 'admissions.manage' => 'Manage applications and enrolment',
-                'students.view' => 'View student records',
+                'students.view' => 'View students in the classes they teach',
+                'students.view-all' => 'View every student in the school',
                 'students.manage' => 'Add and edit students and guardians',
                 'staff.view' => 'View staff records',
                 'staff.manage' => 'Add and edit staff records',
@@ -83,18 +84,18 @@ final class PermissionCatalogue
             )),
             SchoolRole::Principal => [
                 'academics.manage', 'timetable.manage', 'attendance.take', 'attendance.view',
-                'admissions.manage', 'students.view', 'students.manage', 'staff.view',
+                'admissions.manage', 'students.view', 'students.view-all', 'students.manage', 'staff.view',
                 'scores.enter', 'results.view', 'results.approve', 'results.publish',
                 'cbt.manage', 'finance.view', 'activity.view',
             ],
             SchoolRole::Bursar => [
-                'students.view', 'fees.manage', 'payments.record', 'finance.view',
+                'students.view', 'students.view-all', 'fees.manage', 'payments.record', 'finance.view',
                 'expenses.manage', 'payroll.manage',
             ],
             SchoolRole::Teacher => [
                 'attendance.take', 'students.view', 'scores.enter', 'results.view', 'cbt.manage',
             ],
-            SchoolRole::StoreKeeper => ['inventory.manage', 'students.view'],
+            SchoolRole::StoreKeeper => ['inventory.manage', 'students.view', 'students.view-all'],
             SchoolRole::Student => ['portal.self', 'cbt.take'],
             SchoolRole::Parent => ['portal.wards'],
         };

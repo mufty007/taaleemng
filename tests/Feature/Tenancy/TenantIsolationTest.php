@@ -2,9 +2,30 @@
 
 use App\Actions\Platform\AddSchoolMember;
 use App\Enums\SchoolRole;
+use App\Models\AcademicSession;
+use App\Models\Applicant;
+use App\Models\AssessmentComponent;
+use App\Models\ClassLevel;
+use App\Models\CommentTemplate;
+use App\Models\FeeItem;
+use App\Models\FeeStructure;
+use App\Models\GradingScheme;
+use App\Models\Guardian;
+use App\Models\Invoice;
 use App\Models\NumberSequence;
+use App\Models\Payment;
+use App\Models\PaymentAllocation;
+use App\Models\ReportTrait;
+use App\Models\ResultPublication;
 use App\Models\School;
 use App\Models\SchoolSetting;
+use App\Models\Score;
+use App\Models\Staff;
+use App\Models\Stream;
+use App\Models\Student;
+use App\Models\StudentImport;
+use App\Models\Subject;
+use App\Models\TermReport;
 use App\Models\User;
 use App\Support\Tenancy\CurrentSchool;
 use App\Support\Tenancy\MissingSchoolContextException;
@@ -19,6 +40,81 @@ use Illuminate\Foundation\Queue\Queueable;
 dataset('tenant models', [
     'school settings' => [fn () => SchoolSetting::query()->create(['key' => 'motto_colour', 'value' => 'green'])],
     'number sequences' => [fn () => NumberSequence::query()->create(['key' => 'invoice_no', 'pattern' => 'INV/{SEQ:4}'])],
+    'academic sessions' => [fn () => AcademicSession::query()->create(['name' => '2026/2027', 'starts_on' => '2026-09-14', 'ends_on' => '2027-07-23'])],
+    'terms' => [fn () => AcademicSession::query()->create(['name' => '2026/2027', 'starts_on' => '2026-09-14', 'ends_on' => '2027-07-23'])
+        ->terms()->create(['sequence' => 1, 'name' => 'First Term', 'starts_on' => '2026-09-14', 'ends_on' => '2026-12-18'])],
+    'class levels' => [fn () => ClassLevel::query()->create(['name' => 'JSS 1', 'short_name' => 'JSS 1', 'section' => 'junior'])],
+    'class arms' => [fn () => ClassLevel::query()->create(['name' => 'JSS 1', 'short_name' => 'JSS 1', 'section' => 'junior'])->arms()->create(['name' => 'A'])],
+    'streams' => [fn () => Stream::query()->create(['name' => 'Science'])],
+    'subjects' => [fn () => Subject::query()->create(['name' => 'Mathematics', 'code' => 'MTH', 'category' => 'core'])],
+    'class subjects' => [fn () => ClassLevel::query()->create(['name' => 'JSS 1', 'short_name' => 'JSS 1', 'section' => 'junior'])->arms()->create(['name' => 'A'])
+        ->classSubjects()->create(['subject_id' => Subject::query()->create(['name' => 'Mathematics', 'code' => 'MTH', 'category' => 'core'])->id])],
+    'staff' => [fn () => Staff::query()->create(['staff_no' => 'STF/001', 'first_name' => 'Emeka', 'last_name' => 'Okonkwo', 'gender' => 'male', 'designation' => 'Teacher'])],
+    'students' => [fn () => Student::query()->create(['admission_no' => 'ADM/001', 'first_name' => 'Aisha', 'last_name' => 'Bello', 'gender' => 'female'])],
+    'guardians' => [fn () => Guardian::query()->create(['first_name' => 'Amina', 'last_name' => 'Bello', 'relationship' => 'mother', 'phone' => '+234802'.random_int(1000000, 9999999)])],
+    'enrolments' => [fn () => Student::query()->create(['admission_no' => 'ADM/001', 'first_name' => 'Aisha', 'last_name' => 'Bello', 'gender' => 'female'])->enrolments()->create([
+        'academic_session_id' => AcademicSession::query()->create(['name' => '2026/2027', 'starts_on' => '2026-09-14', 'ends_on' => '2027-07-23'])->id,
+        'class_arm_id' => ClassLevel::query()->create(['name' => 'JSS 1', 'short_name' => 'JSS 1', 'section' => 'junior'])->arms()->create(['name' => 'A'])->id,
+    ])],
+    'assessment components' => [fn () => AssessmentComponent::query()->create(['name' => 'First CA', 'short_name' => 'CA1', 'max_score' => 20])],
+    'grading schemes' => [fn () => GradingScheme::query()->create(['name' => 'Basic', 'bands' => [['min' => 0, 'grade' => 'F', 'remark' => 'Fail']]])],
+    'scores' => [function () {
+        $session = AcademicSession::query()->create(['name' => '2026/2027', 'starts_on' => '2026-09-14', 'ends_on' => '2027-07-23']);
+        $arm = ClassLevel::query()->create(['name' => 'JSS 1', 'short_name' => 'JSS 1', 'section' => 'junior'])->arms()->create(['name' => 'A']);
+        $student = Student::query()->create(['admission_no' => 'ADM/001', 'first_name' => 'Aisha', 'last_name' => 'Bello', 'gender' => 'female']);
+
+        return Score::query()->create([
+            'term_id' => $session->terms()->create(['sequence' => 1, 'name' => 'First Term', 'starts_on' => '2026-09-14', 'ends_on' => '2026-12-18'])->id,
+            'enrolment_id' => $student->enrolments()->create(['academic_session_id' => $session->id, 'class_arm_id' => $arm->id])->id,
+            'class_subject_id' => $arm->classSubjects()->create(['subject_id' => Subject::query()->create(['name' => 'Mathematics', 'code' => 'MTH', 'category' => 'core'])->id])->id,
+            'assessment_component_id' => AssessmentComponent::query()->create(['name' => 'First CA', 'short_name' => 'CA1', 'max_score' => 20])->id,
+            'score' => 15,
+        ]);
+    }],
+    'applicants' => [fn () => Applicant::query()->create([
+        'application_no' => 'APP/2026/0001',
+        'academic_session_id' => AcademicSession::query()->create(['name' => '2026/2027', 'starts_on' => '2026-09-14', 'ends_on' => '2027-07-23'])->id,
+        'class_level_id' => ClassLevel::query()->create(['name' => 'JSS 1', 'short_name' => 'JSS 1', 'section' => 'junior'])->id,
+        'status' => 'submitted', 'source' => 'online', 'first_name' => 'Zainab', 'last_name' => 'Yusuf', 'gender' => 'female',
+        'guardian_first_name' => 'Halima', 'guardian_last_name' => 'Yusuf', 'guardian_relationship' => 'mother', 'guardian_phone' => '+2348055551212',
+    ])],
+    'fee items' => [fn () => FeeItem::query()->create(['name' => 'Tuition'])],
+    'fee structures' => [fn () => FeeStructure::query()->create([
+        'term_id' => isolationInvoice()->term_id,
+        'class_level_id' => ClassLevel::query()->create(['name' => 'JSS 2', 'short_name' => 'JSS 2', 'section' => 'junior'])->id,
+        'fee_item_id' => FeeItem::query()->create(['name' => 'Tuition'])->id,
+        'amount' => 150_000_00,
+    ])],
+    'invoices' => [fn () => isolationInvoice()],
+    'invoice lines' => [fn () => isolationInvoice()->lines()->create(['description' => 'Tuition', 'amount' => 150_000_00])],
+    'payments' => [fn () => isolationPayment(isolationInvoice())],
+    'payment allocations' => [function () {
+        $invoice = isolationInvoice();
+
+        return PaymentAllocation::query()->create(['payment_id' => isolationPayment($invoice)->id, 'invoice_id' => $invoice->id, 'amount' => 1_000_00]);
+    }],
+    'student imports' => [fn () => StudentImport::query()->create(['file_name' => 'jss1.csv', 'status' => 'checked', 'rows' => [], 'problems' => []])],
+    'report traits' => [fn () => ReportTrait::query()->create(['name' => 'Punctuality', 'category' => 'affective'])],
+    'comment templates' => [fn () => CommentTemplate::query()->create(['audience' => 'form_teacher', 'min_average' => 0, 'max_average' => 100, 'body' => 'Keep it up, {name}.'])],
+    'term reports' => [function () {
+        $session = AcademicSession::query()->create(['name' => '2026/2027', 'starts_on' => '2026-09-14', 'ends_on' => '2027-07-23']);
+        $student = Student::query()->create(['admission_no' => 'ADM/001', 'first_name' => 'Aisha', 'last_name' => 'Bello', 'gender' => 'female']);
+
+        return TermReport::query()->create([
+            'term_id' => $session->terms()->create(['sequence' => 1, 'name' => 'First Term', 'starts_on' => '2026-09-14', 'ends_on' => '2026-12-18'])->id,
+            'enrolment_id' => $student->enrolments()->create([
+                'academic_session_id' => $session->id,
+                'class_arm_id' => ClassLevel::query()->create(['name' => 'JSS 1', 'short_name' => 'JSS 1', 'section' => 'junior'])->arms()->create(['name' => 'A'])->id,
+            ])->id,
+            'teacher_comment' => 'A good term.',
+        ]);
+    }],
+    'result publications' => [fn () => ResultPublication::query()->create([
+        'term_id' => AcademicSession::query()->create(['name' => '2026/2027', 'starts_on' => '2026-09-14', 'ends_on' => '2027-07-23'])
+            ->terms()->create(['sequence' => 1, 'name' => 'First Term', 'starts_on' => '2026-09-14', 'ends_on' => '2026-12-18'])->id,
+        'class_arm_id' => ClassLevel::query()->create(['name' => 'JSS 1', 'short_name' => 'JSS 1', 'section' => 'junior'])->arms()->create(['name' => 'A'])->id,
+        'published_at' => now(),
+    ])],
 ]);
 
 beforeEach(function () {
@@ -162,4 +258,32 @@ class RecordsCurrentSchoolJob implements ShouldQueue
     {
         self::$ranFor = $current->id();
     }
+}
+
+/**
+ * An invoice with everything it hangs off, in the school currently in context.
+ */
+function isolationInvoice(): Invoice
+{
+    $session = AcademicSession::query()->create(['name' => '2026/2027', 'starts_on' => '2026-09-14', 'ends_on' => '2027-07-23']);
+    $student = Student::query()->create(['admission_no' => 'ADM/'.fake()->unique()->numerify('####'), 'first_name' => 'Aisha', 'last_name' => 'Bello', 'gender' => 'female']);
+    $enrolment = $student->enrolments()->create([
+        'academic_session_id' => $session->id,
+        'class_arm_id' => ClassLevel::query()->create(['name' => 'JSS 1', 'short_name' => 'JSS 1', 'section' => 'junior'])->arms()->create(['name' => 'A'])->id,
+    ]);
+
+    return Invoice::query()->create([
+        'invoice_no' => 'INV/26/'.fake()->unique()->numerify('#####'),
+        'student_id' => $student->id,
+        'enrolment_id' => $enrolment->id,
+        'term_id' => $session->terms()->create(['sequence' => 1, 'name' => 'First Term', 'starts_on' => '2026-09-14', 'ends_on' => '2026-12-18'])->id,
+        'total' => 150_000_00,
+        'status' => 'unpaid',
+        'issued_at' => now(),
+    ]);
+}
+
+function isolationPayment(Invoice $invoice): Payment
+{
+    return Payment::query()->create(['student_id' => $invoice->student_id, 'amount' => 1_000_00, 'method' => 'cash', 'status' => 'confirmed', 'paid_at' => now()]);
 }

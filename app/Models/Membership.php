@@ -5,12 +5,17 @@ namespace App\Models;
 use App\Enums\MembershipStatus;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\Pivot;
+use Illuminate\Support\Carbon;
 
 /**
  * A user's membership of one school (the school_user pivot).
  *
  * Roles live in Spatie's tables, scoped by school; this row only records
  * whether the person may sign in to that school at all.
+ *
+ * @property MembershipStatus $status
+ * @property Carbon|null $joined_at
+ * @property Carbon|null $last_active_at
  */
 class Membership extends Pivot
 {

@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Route;
  *
  * Modules that are not built yet have no route; they are listed with a "Soon"
  * badge so the shape of the product is visible while it is being built.
+ * Parents and students get a short portal menu instead.
  */
 final class SchoolNavigation
 {
@@ -18,40 +19,78 @@ final class SchoolNavigation
      */
     public static function for(User $user): array
     {
+        if (! $user->isStaffInCurrentSchool() && ! $user->is_platform_admin) {
+            return self::build(self::portalGroups($user), $user);
+        }
+
         $groups = [
             'Overview' => [
-                ['Dashboard', 'layout-dashboard', 'school.dashboard', null],
+                ['Dashboard', 'layout-dashboard', 'school.dashboard', null, 'school.dashboard'],
             ],
             'Academics' => [
-                ['Sessions & Terms', 'calendar-range', null, 'academics.manage'],
-                ['Classes & Subjects', 'layers', null, 'academics.manage'],
-                ['Time Table', 'calendar-days', null, null],
-                ['Attendance', 'clipboard-check', null, 'attendance.take'],
+                ['Sessions & Terms', 'calendar-range', 'school.sessions.index', 'academics.manage', 'school.sessions.*'],
+                ['Classes', 'layers', 'school.classes.index', 'students.view', 'school.classes.*'],
+                ['Subjects', 'book-open', 'school.subjects.index', 'academics.manage', 'school.subjects.*'],
+                ['Promotion', 'trending-up', 'school.promotion.index', 'academics.manage', 'school.promotion.*'],
+                ['Time Table', 'calendar-days', null, 'timetable.manage', null],
+                ['Attendance', 'clipboard-check', null, 'attendance.take', null],
             ],
             'People' => [
-                ['Admissions', 'user-plus', null, 'admissions.manage'],
-                ['Students', 'graduation-cap', null, 'students.view'],
-                ['Staff', 'briefcase', null, 'staff.view'],
+                ['Students', 'graduation-cap', 'school.students.index', 'students.view', 'school.students.*'],
+                ['Staff', 'briefcase', 'school.staff.index', 'staff.view', 'school.staff.*'],
+                ['Admissions', 'user-plus', 'school.admissions.index', 'admissions.manage', 'school.admissions.*'],
             ],
             'Results' => [
-                ['Score entry', 'file-pen-line', null, 'scores.enter'],
-                ['Report cards', 'file-text', null, 'results.view'],
-                ['Exams & CBT', 'monitor-check', null, 'cbt.manage'],
+                ['Score entry', 'file-pen-line', 'school.scores.index', 'scores.enter', 'school.scores.*'],
+                ['Results & broadsheets', 'file-text', 'school.results.index', 'results.view', 'school.results.*'],
+                ['Exams & CBT', 'monitor-check', null, 'cbt.manage', null],
             ],
             'Finance' => [
-                ['School fees', 'receipt', null, 'fees.manage'],
-                ['Cashflow', 'wallet', null, 'finance.view'],
-                ['Payroll', 'banknote', null, 'payroll.manage'],
-                ['Inventory', 'package', null, 'inventory.manage'],
+                ['Invoices', 'receipt', 'school.invoices.index', 'finance.view', 'school.invoices.*'],
+                ['Payments', 'banknote-arrow-down', 'school.payments.index', 'finance.view', 'school.payments.*'],
+                ['Debtors', 'hand-coins', 'school.debtors.index', 'finance.view', 'school.debtors.*'],
+                ['Fee setup', 'settings-2', 'school.fees.setup', 'fees.manage', 'school.fees.*'],
+                ['Cashflow', 'wallet', null, 'finance.view', null],
+                ['Payroll', 'banknote', null, 'payroll.manage', null],
+                ['Inventory', 'package', null, 'inventory.manage', null],
             ],
             'System' => [
-                ['School information', 'school', null, 'school.manage'],
-                ['Users & roles', 'users-round', null, 'users.manage'],
-                ['Activity log', 'history', null, 'activity.view'],
-                ['Settings', 'settings', null, 'school.manage'],
+                ['School information', 'school', 'school.profile.edit', 'school.manage', 'school.profile.*'],
+                ['Users & roles', 'users-round', 'school.members.index', 'users.manage', 'school.members.*'],
+                ['Activity log', 'history', 'school.activity.index', 'activity.view', 'school.activity.*'],
+                ['Settings', 'settings', null, 'school.manage', null],
             ],
         ];
 
+        // A teacher who is also a parent at the same school.
+        if ($user->guardianRecord()) {
+            $groups['Overview'][] = ['My children', 'baby', 'school.portal', null, 'school.portal*'];
+        }
+
+        return self::build($groups, $user);
+    }
+
+    /**
+     * @return array<string, list<array{0: string, 1: string, 2: ?string, 3: ?string, 4: ?string}>>
+     */
+    private static function portalGroups(User $user): array
+    {
+        $home = $user->guardianRecord() ? ['My children', 'users', 'school.portal', null, 'school.portal*'] : ['My class', 'graduation-cap', 'school.portal', null, 'school.portal*'];
+
+        return [
+            'Portal' => [
+                $home,
+                ['Attendance', 'clipboard-check', null, null, null],
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, list<array{0: string, 1: string, 2: ?string, 3: ?string, 4: ?string}>>  $groups
+     * @return list<array{label: string, items: list<array{label: string, icon: string, route: ?string, active: bool}>}>
+     */
+    private static function build(array $groups, User $user): array
+    {
         $navigation = [];
 
         foreach ($groups as $label => $items) {
@@ -70,7 +109,7 @@ final class SchoolNavigation
                     'label' => $item[0],
                     'icon' => $item[1],
                     'route' => $item[2],
-                    'active' => $item[2] !== null && Route::is($item[2].'*'),
+                    'active' => $item[4] !== null && Route::is($item[4]),
                 ], $visible),
             ];
         }

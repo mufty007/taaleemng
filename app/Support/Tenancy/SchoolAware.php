@@ -16,7 +16,7 @@ trait SchoolAware
 
     protected function captureSchool(?School $school = null): void
     {
-        $this->schoolId = $school?->id ?? app(CurrentSchool::class)->getOrFail(static::class)->id;
+        $this->schoolId = $school->id ?? app(CurrentSchool::class)->getOrFail(static::class)->id;
     }
 
     /**

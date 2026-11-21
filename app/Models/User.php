@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Enums\MembershipStatus;
+use App\Enums\SchoolRole;
+use App\Support\Tenancy\CurrentSchool;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -21,6 +23,11 @@ class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasRoles, HasUlids, Notifiable, TwoFactorAuthenticatable;
+
+    /**
+     * @var array<string, mixed>
+     */
+    private array $schoolRecordCache = [];
 
     /**
      * Get the attributes that should be cast.
@@ -77,6 +84,57 @@ class User extends Authenticatable
         }
 
         return $this->activeSchools()->whereKey($school->getKey())->exists();
+    }
+
+    /**
+     * This person's staff record in the school in context, if they work there.
+     */
+    public function staffRecord(): ?Staff
+    {
+        return $this->rememberForSchool('staff', fn () => Staff::query()->where('user_id', $this->id)->first());
+    }
+
+    /**
+     * This person's guardian record in the school in context, if they are a parent there.
+     */
+    public function guardianRecord(): ?Guardian
+    {
+        return $this->rememberForSchool('guardian', fn () => Guardian::query()->where('user_id', $this->id)->first());
+    }
+
+    /**
+     * This person's student record in the school in context, if they study there.
+     */
+    public function studentRecord(): ?Student
+    {
+        return $this->rememberForSchool('student', fn () => Student::query()->where('user_id', $this->id)->first());
+    }
+
+    /**
+     * Memoise a lookup per school, so switching school context never returns another school's record.
+     *
+     * @template TValue
+     *
+     * @param  callable(): TValue  $resolve
+     * @return TValue
+     */
+    private function rememberForSchool(string $key, callable $resolve): mixed
+    {
+        $cacheKey = app(CurrentSchool::class)->getOrFail(self::class)->id.'|'.$key;
+
+        if (! array_key_exists($cacheKey, $this->schoolRecordCache)) {
+            $this->schoolRecordCache[$cacheKey] = $resolve();
+        }
+
+        return $this->schoolRecordCache[$cacheKey];
+    }
+
+    /**
+     * Whether the user holds any staff role in the school in context (as opposed to only parent or student).
+     */
+    public function isStaffInCurrentSchool(): bool
+    {
+        return $this->getRoleNames()->contains(fn (string $role): bool => SchoolRole::tryFrom($role)?->isStaff() ?? false);
     }
 
     public function initials(): string
