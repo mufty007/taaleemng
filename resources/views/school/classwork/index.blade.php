@@ -71,7 +71,7 @@
         </x-drawer>
 
         <x-drawer name="new-assignment" title="New assignment" description="Students see it in their portal and hand it in online." :show="$errors->assignment->isNotEmpty() || request('new') === 'assignment'" width="sm:max-w-xl">
-            <form method="POST" action="{{ route('school.classwork.assignments.store') }}" class="flex flex-col gap-4" id="new-assignment-form">
+            <form method="POST" action="{{ route('school.classwork.assignments.store') }}" enctype="multipart/form-data" class="flex flex-col gap-4" id="new-assignment-form">
                 @csrf
                 <input type="hidden" name="publish" value="1">
                 <x-select-field label="Class and subject" name="class_subject_id" :options="$subjectOptions" :value="$selected" placeholder="Choose" bag="assignment" required />
@@ -85,6 +85,7 @@
                     <x-field label="Due" name="due_at" type="datetime-local" bag="assignment" :value="now()->addWeek()->setTime(8, 0)->format('Y-m-d\TH:i')" required />
                     <x-field label="Marked out of" name="max_score" type="number" min="1" max="100" bag="assignment" value="10" />
                 </div>
+                <x-file-picker bag="assignment" label="Attach a worksheet or notes (optional)" hint="PDF, Word, PowerPoint or pictures · up to 5 files" />
             </form>
             <x-slot:footer><x-button variant="brand" icon="send" form="new-assignment-form">Set assignment</x-button></x-slot:footer>
         </x-drawer>

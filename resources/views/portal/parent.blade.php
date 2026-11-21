@@ -18,12 +18,14 @@
         </div>
     @endif
 
+    @include('school.announcements._latest')
+
     <div class="grid grid-cols-1 gap-5 md:grid-cols-2" data-stagger>
         @foreach ($children as $child)
             @php($arm = $child->currentEnrolment?->classArm)
             <article class="flex flex-col gap-5 rounded-3xl border border-line bg-white p-6">
                 <div class="flex items-center gap-4">
-                    <span @class(['grid size-16 flex-none place-items-center rounded-2xl text-xl font-bold', 'bg-[#FFD6D2]' => $child->gender === \App\Enums\Gender::Female, 'bg-sky-100' => $child->gender === \App\Enums\Gender::Male])>{{ $child->initials() }}</span>
+                    <x-avatar :person="$child" class="size-16 rounded-2xl text-xl" />
                     <div class="min-w-0">
                         <h2 class="m-0 text-xl font-bold tracking-[-0.02em]">{{ $child->fullName() }}</h2>
                         <div class="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
@@ -56,10 +58,12 @@
                         <span>{{ $balance > 0 ? 'Fees owed' : 'School fees' }}</span>
                         <span class="text-sm font-bold">{{ $balance > 0 ? \App\Support\Money::format($balance) : 'Paid up' }}</span>
                     </a>
-                    <span class="flex flex-col items-center gap-1.5 rounded-xl border border-dashed border-line px-2 py-3 text-muted">
-                        <x-lucide-clipboard-check class="size-5" aria-hidden="true" /> Attendance
-                        <span class="text-[10px] font-semibold tracking-wide uppercase">Soon</span>
-                    </span>
+                    @php($register = $attendance[$child->currentEnrolment?->id] ?? null)
+                    <a href="{{ route('school.portal.child', $child) }}#attendance" class="flex flex-col items-center gap-1 rounded-xl border border-line px-2 py-3 text-muted hover:border-brand hover:text-ink">
+                        <x-lucide-clipboard-check class="size-5" aria-hidden="true" />
+                        <span>Attendance</span>
+                        <span class="text-sm font-bold text-ink">{{ $register && $register['rate'] !== null ? $register['rate'].'%' : '—' }}</span>
+                    </a>
                 </div>
 
                 <x-button variant="secondary" :href="route('school.portal.child', $child)" class="mt-auto">See {{ $child->first_name }}’s class and teachers</x-button>

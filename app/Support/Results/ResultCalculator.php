@@ -14,6 +14,9 @@ use App\Models\Term;
  * subject positions, each student's average and class position, and subject statistics.
  *
  * Positions use competition ranking ("1224"): equal scores share a position.
+ *
+ * Until every component is in (usually the exam), a subject is "so far": its total is out of
+ * the marks entered so far, and the percentage is what report cards show instead of a grade.
  */
 class ResultCalculator
 {
@@ -44,6 +47,8 @@ class ResultCalculator
             });
 
         $componentCount = $components->count();
+        $maxScores = $components->pluck('max_score', 'id')->all();
+        $subjectPercents = [];
         $students = [];
         $subjectTotals = [];
 
@@ -58,13 +63,18 @@ class ResultCalculator
                 }
 
                 $total = round(array_sum($entered), 1);
+                $max = (int) array_sum(array_intersect_key($maxScores, $entered));
+                $percent = $max > 0 ? round($total / $max * 100, 1) : 0.0;
                 $subjects[$classSubject->id] = [
                     'scores' => $entered,
                     'total' => $total,
+                    'max' => $max,
+                    'percent' => $percent,
                     'complete' => count($entered) === $componentCount,
                     ...$scheme->gradeFor($total),
                 ];
                 $subjectTotals[$classSubject->id][$enrolment->id] = $total;
+                $subjectPercents[$classSubject->id][$enrolment->id] = $percent;
             }
 
             $sum = array_sum(array_column($subjects, 'total'));
@@ -75,6 +85,7 @@ class ResultCalculator
                 'subjects' => $subjects,
                 'total' => round($sum, 1),
                 'average' => $subjects === [] ? null : round($sum / count($subjects), 2),
+                'percent' => $subjects === [] ? null : round(array_sum(array_column($subjects, 'percent')) / count($subjects), 1),
                 'subject_count' => count($subjects),
                 // Every component of every subject entered, so the average is final.
                 'complete' => $subjects !== [] && array_all($subjects, fn (array $subject) => $subject['complete']),
@@ -93,11 +104,12 @@ class ResultCalculator
             $students[$enrolmentId]['position'] = $position;
         }
 
-        $statistics = collect($subjectTotals)->map(fn (array $totals) => [
+        $statistics = collect($subjectTotals)->map(fn (array $totals, int $classSubjectId) => [
             'average' => round(array_sum($totals) / count($totals), 1),
             'highest' => max($totals),
             'lowest' => min($totals),
             'count' => count($totals),
+            'percent' => round(array_sum($subjectPercents[$classSubjectId]) / count($subjectPercents[$classSubjectId]), 1),
         ])->all();
 
         return new ClassResults(

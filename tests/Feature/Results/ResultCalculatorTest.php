@@ -79,7 +79,7 @@ it('leaves a student with no scores unranked', function () {
 });
 
 it('works out subject statistics and how much has been entered', function () {
-    expect($this->results->statistics[$this->maths->id])->toBe(['average' => 76.7, 'highest' => 90.0, 'lowest' => 70.0, 'count' => 3])
+    expect($this->results->statistics[$this->maths->id])->toBe(['average' => 76.7, 'highest' => 90.0, 'lowest' => 70.0, 'count' => 3, 'percent' => 76.7])
         ->and($this->results->enteredEntries)->toBe(18)
         ->and($this->results->expectedEntries)->toBe(4 * $this->results->classSubjects->count() * 3)
         ->and($this->results->completion())->toBe((int) round(18 / $this->results->expectedEntries * 100));

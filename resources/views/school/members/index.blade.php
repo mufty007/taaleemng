@@ -25,7 +25,7 @@
         </form>
 
         <div class="overflow-x-auto">
-            <table class="w-full min-w-[760px] border-collapse text-left text-[15px]">
+            <table class="w-full min-w-[820px] border-collapse text-left text-[15px]">
                 <thead>
                     <tr class="text-xs font-semibold tracking-[0.05em] text-muted uppercase">
                         <th scope="col" class="px-5 py-3 font-semibold">Person</th>
@@ -37,7 +37,16 @@
                 </thead>
                 <tbody>
                     @forelse ($members as $member)
-                        @php($active = $member->membership->status === \App\Enums\MembershipStatus::Active)
+                        @php
+                            $active = $member->membership->status === \App\Enums\MembershipStatus::Active;
+                            $memberRoles = $rolesByUser[$member->id] ?? [];
+                            $staffRole = collect($memberRoles)
+                                ->map(fn (string $name) => \App\Enums\SchoolRole::tryFrom($name))
+                                ->first(fn (?\App\Enums\SchoolRole $role) => $role?->isStaff());
+                            $portalRoles = collect($memberRoles)
+                                ->map(fn (string $name) => \App\Enums\SchoolRole::tryFrom($name))
+                                ->filter(fn (?\App\Enums\SchoolRole $role) => $role && ! $role->isStaff());
+                        @endphp
                         <tr class="border-t border-line">
                             <td class="px-5 py-3">
                                 <div class="flex items-center gap-3">
@@ -49,10 +58,26 @@
                                 </div>
                             </td>
                             <td class="px-3 py-3">
-                                <div class="flex flex-wrap gap-1">
-                                    @foreach ($rolesByUser[$member->id] ?? [] as $roleName)
-                                        <x-badge :tone="\App\Enums\SchoolRole::tryFrom($roleName)?->isStaff() ? 'brand' : 'neutral'">{{ \App\Enums\SchoolRole::tryFrom($roleName)?->label() ?? $roleName }}</x-badge>
+                                <div class="flex flex-col gap-2">
+                                    @if ($staffRole && ! $member->is(auth()->user()))
+                                        <form method="POST" action="{{ route('school.members.role', $member->ulid) }}" class="flex flex-wrap items-center gap-2">
+                                            @csrf
+                                            <label class="sr-only" for="role-{{ $member->ulid }}">Role for {{ $member->name }}</label>
+                                            <select id="role-{{ $member->ulid }}" name="role" class="field py-1.5 text-sm" onchange="this.form.requestSubmit()">
+                                                @foreach ($staffRoleOptions as $value => $label)
+                                                    <option value="{{ $value }}" @selected($staffRole->value === $value)>{{ $label }}</option>
+                                                @endforeach
+                                            </select>
+                                        </form>
+                                    @elseif ($staffRole)
+                                        <x-badge tone="brand">{{ $staffRole->label() }}</x-badge>
+                                    @endif
+                                    @foreach ($portalRoles as $portalRole)
+                                        <x-badge tone="neutral">{{ $portalRole->label() }}</x-badge>
                                     @endforeach
+                                    @if (! $staffRole && $portalRoles->isEmpty())
+                                        <span class="text-sm text-muted">No role</span>
+                                    @endif
                                 </div>
                             </td>
                             <td class="px-3 py-3 text-sm text-muted">{{ $member->membership->last_active_at?->diffForHumans() ?? 'Never' }}</td>

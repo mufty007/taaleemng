@@ -29,6 +29,20 @@ final class Money
     }
 
     /**
+     * "₦1.2m", "₦850k": short amounts for chart labels.
+     */
+    public static function compact(int $kobo): string
+    {
+        $naira = intdiv(abs($kobo), 100);
+
+        return ($kobo < 0 ? '−' : '').'₦'.match (true) {
+            $naira >= 1_000_000 => rtrim(rtrim(number_format($naira / 1_000_000, 1), '0'), '.').'m',
+            $naira >= 1_000 => round($naira / 1_000).'k',
+            default => (string) $naira,
+        };
+    }
+
+    /**
      * Turn what someone typed ("185,000", "185000.50", "₦185 000") into kobo.
      */
     public static function toKobo(string|int|float $naira): int

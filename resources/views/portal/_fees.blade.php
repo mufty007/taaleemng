@@ -10,8 +10,9 @@
             <div @class(['text-3xl font-bold tracking-[-0.02em]', 'text-danger' => $balance > 0, 'text-naija-700' => $balance <= 0])>{{ $balance === 0 ? 'All paid' : Money::format(abs($balance)) }}</div>
         </div>
         @if ($balance > 0 && ! $canPayOnline)
-            <p class="m-0 max-w-sm text-sm text-muted">Pay at the school bursary or by bank transfer, then keep your receipt.</p>
+            <p class="m-0 max-w-sm text-sm text-muted">{{ ($ownProfile ?? false) ? 'Ask a parent or guardian to pay at the bursary or online from their portal.' : 'Pay at the school bursary or by bank transfer, then keep your receipt.' }}</p>
         @endif
+
     </div>
 
     <x-card :padding="false">
@@ -23,6 +24,7 @@
                     <div class="text-sm text-muted">{{ Money::format($invoice->total) }}{{ $invoice->due_on ? ' · pay by '.$invoice->due_on->format('j M Y') : '' }}</div>
                 </div>
                 <x-badge :tone="$invoice->status->tone()">{{ $invoice->status->label() }}</x-badge>
+                <x-button data-native variant="ghost" size="sm" icon="printer" :href="route('school.invoices.print', $invoice)">Invoice</x-button>
                 @if ($invoice->balance() > 0 && $canPayOnline)
                     <form method="POST" action="{{ route('school.portal.invoices.pay', $invoice) }}" data-native>
                         @csrf

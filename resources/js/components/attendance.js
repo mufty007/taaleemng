@@ -1,12 +1,14 @@
 import { firstError, sendJson } from '../http';
 
 /**
- * The daily class register. Tapping P / L / A / E marks a student; changes save
- * automatically in small batches, like the scorebook.
+ * Daily register (class or staff). Tapping P / L / A / E marks a row; changes
+ * save automatically in small batches. idKey is the row/payload id field
+ * (`enrolment` for students, `staff` for the staff register).
  */
-export default ({ rows, url, date, locked }) => ({
+export default ({ rows, url, date, locked, idKey = 'enrolment' }) => ({
     rows,
     locked,
+    idKey,
     dirty: {},
     saving: false,
     savedAt: null,
@@ -27,7 +29,7 @@ export default ({ rows, url, date, locked }) => ({
         }
 
         row.status = status;
-        this.dirty[row.enrolment] = row;
+        this.dirty[row[this.idKey]] = row;
         this.queueSave();
     },
 
@@ -37,7 +39,7 @@ export default ({ rows, url, date, locked }) => ({
 
     note(row) {
         if (row.status) {
-            this.dirty[row.enrolment] = row;
+            this.dirty[row[this.idKey]] = row;
             this.queueSave();
         }
     },
@@ -48,7 +50,11 @@ export default ({ rows, url, date, locked }) => ({
     },
 
     async save() {
-        const records = Object.values(this.dirty).map((row) => ({ enrolment: row.enrolment, status: row.status, note: row.note || null }));
+        const records = Object.values(this.dirty).map((row) => ({
+            [this.idKey]: row[this.idKey],
+            status: row.status,
+            note: row.note || null,
+        }));
 
         if (! records.length || this.saving) {
             return;
@@ -69,7 +75,7 @@ export default ({ rows, url, date, locked }) => ({
             this.error = null;
             this.savedAt = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         } catch {
-            this.error = 'You seem to be offline. Tap a student again to retry.';
+            this.error = 'You seem to be offline. Tap again to retry.';
         } finally {
             this.saving = false;
         }

@@ -12,10 +12,12 @@ use App\Models\Quiz;
 use App\Models\QuizAttempt;
 use App\Models\Student;
 use App\Support\Classwork\ClassworkAccess;
+use App\Support\Files\StoredFiles;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 /**
  * A student's classwork: assignments to hand in, and quizzes and CBT exams to take.
@@ -61,11 +63,37 @@ class ClassworkController extends Controller
             return back()->with('status', 'Your teacher has marked this already, so it can’t be changed.');
         }
 
-        $data = $request->validate(['body' => ['required', 'string', 'max:20000']], ['body.required' => 'Write your answer before handing it in.']);
+        $kept = array_values(array_diff_key($submission->files ?? [], array_flip(array_map('intval', (array) $request->input('remove_files', [])))));
+
+        $data = $request->validate([
+            'body' => ['nullable', 'string', 'max:20000'],
+            ...StoredFiles::rules('files'),
+            'remove_files' => ['array'],
+        ], [
+            'files.*.mimes' => 'Upload a PDF, a Word or PowerPoint file, or photos (JPG, PNG) of your work.',
+            'files.*.max' => 'Each file must be 10 MB or smaller.',
+        ]);
+
+        $uploads = $request->file('files', []);
+
+        if (blank($data['body'] ?? null) && $kept === [] && $uploads === []) {
+            throw ValidationException::withMessages(['body' => 'Write your answer or upload your work before handing it in.']);
+        }
+
+        if (count($kept) + count($uploads) > StoredFiles::MAX_FILES) {
+            throw ValidationException::withMessages(['files' => 'You can hand in up to '.StoredFiles::MAX_FILES.' files. Remove some first.']);
+        }
+
+        $keptPaths = array_column($kept, 'path');
+        StoredFiles::delete(array_values(array_filter($submission->files ?? [], fn (array $file) => ! in_array($file['path'], $keptPaths, true))));
 
         AssignmentSubmission::query()->updateOrCreate(
             ['assignment_id' => $assignment->id, 'student_id' => $student->id],
-            ['body' => $data['body'], 'submitted_at' => now()],
+            [
+                'body' => $data['body'] ?? null,
+                'files' => [...$kept, ...StoredFiles::store($uploads, 'schools/'.$assignment->school_id.'/submissions/'.$assignment->ulid)] ?: null,
+                'submitted_at' => now(),
+            ],
         );
 
         return to_route('school.portal.classwork')->with('status', 'Handed in'.($assignment->isPastDue() ? ' (late)' : '').'. Well done.');

@@ -10,12 +10,14 @@ import { quizBuilder, quizTaker } from './components/quiz';
 import importProgress from './components/import-progress';
 import remarks from './components/remarks';
 import scorebook from './components/scorebook';
+import timetableEditor from './components/timetable';
 import { store } from './store';
 
 Alpine.plugin(collapse);
 Alpine.plugin(focus);
 
 Alpine.data('attendanceRegister', attendance);
+Alpine.data('timetableEditor', timetableEditor);
 Alpine.data('broadsheet', broadsheet);
 Alpine.data('quizBuilder', quizBuilder);
 Alpine.data('quizTaker', quizTaker);
@@ -74,11 +76,17 @@ Alpine.data('editPanel', (name, initial = {}) => ({
     values: initial.values ?? {},
 
     init() {
-        window.addEventListener(`edit-${name}`, (event) => {
+        this.listener = (event) => {
             this.action = event.detail.action;
             this.values = { ...event.detail.values };
             this.$dispatch('open-drawer', name);
-        });
+        };
+        window.addEventListener(`edit-${name}`, this.listener);
+    },
+
+    // Pages are swapped without reloading, so stop listening when this one goes.
+    destroy() {
+        window.removeEventListener(`edit-${name}`, this.listener);
     },
 }));
 

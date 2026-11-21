@@ -21,7 +21,7 @@ final readonly class ClassResults
      * @param  Collection<int, AssessmentComponent>  $components
      * @param  Collection<int, ClassSubject>  $classSubjects
      * @param  list<array<string, mixed>>  $studentRows
-     * @param  array<int, array{average: float, highest: float, lowest: float, count: int}>  $statistics  by class subject id
+     * @param  array<int, array{average: float, highest: float, lowest: float, count: int, percent: float}>  $statistics  by class subject id
      */
     public function __construct(
         public ClassArm $arm,
@@ -36,6 +36,32 @@ final readonly class ClassResults
         public int $enteredEntries,
     ) {
         $this->students = collect($studentRows);
+    }
+
+    /**
+     * Whether every score for the term is in, so grades and positions are final.
+     */
+    public function isComplete(): bool
+    {
+        return $this->expectedEntries > 0 && $this->enteredEntries >= $this->expectedEntries;
+    }
+
+    /**
+     * Components with no score at all yet in this class, e.g. the exam mid-term.
+     *
+     * @return Collection<int, AssessmentComponent>
+     */
+    public function missingComponents(): Collection
+    {
+        $entered = [];
+
+        foreach ($this->students as $row) {
+            foreach ($row['subjects'] as $cell) {
+                $entered += array_fill_keys(array_keys($cell['scores']), true);
+            }
+        }
+
+        return $this->components->reject(fn (AssessmentComponent $component) => isset($entered[$component->id]))->values();
     }
 
     public function completion(): int

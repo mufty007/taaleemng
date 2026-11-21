@@ -2,7 +2,10 @@
 
 namespace App\Support\Classwork;
 
+use App\Enums\ClassworkStatus;
 use App\Models\AcademicSession;
+use App\Models\Assignment;
+use App\Models\AssignmentSubmission;
 use App\Models\ClassSubject;
 use App\Models\Enrolment;
 use App\Models\Student;
@@ -45,6 +48,34 @@ final class ClassworkAccess
         $sessionId = AcademicSession::current()->id ?? 0;
 
         return Enrolment::query()->where('student_id', $student->id)->where('academic_session_id', $sessionId)->value('class_arm_id');
+    }
+
+    /**
+     * The teacher, the student it is set for, or one of that student's parents.
+     */
+    public static function canSeeAssignment(User $user, Assignment $assignment): bool
+    {
+        if (self::canManage($user, $assignment->classSubject)) {
+            return true;
+        }
+
+        if ($assignment->status !== ClassworkStatus::Published) {
+            return false;
+        }
+
+        $students = collect([$user->studentRecord()])->merge($user->guardianRecord()->students ?? [])->filter();
+
+        return $students->contains(fn (Student $student) => self::isFor($student, $assignment->classSubject));
+    }
+
+    /**
+     * The teacher, the student who handed it in, or one of their parents.
+     */
+    public static function canSeeSubmission(User $user, AssignmentSubmission $submission): bool
+    {
+        return self::canManage($user, $submission->assignment->classSubject)
+            || $user->studentRecord()?->id === $submission->student_id
+            || (bool) $user->guardianRecord()?->students()->whereKey($submission->student_id)->exists();
     }
 
     public static function isFor(Student $student, ClassSubject $classSubject): bool

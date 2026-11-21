@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Fees\AllocatePayments;
+use App\Actions\Fees\GenerateInvoices;
 use App\Enums\InvoiceStatus;
 use App\Enums\PaymentStatus;
 use App\Enums\SchoolRole;
@@ -139,6 +140,67 @@ it('reverses a payment and reopens the invoice, keeping the receipt on record', 
     $this->actingAs($this->bursar)->get(route('school.payments.receipt', [$this->school, $payment]))->assertOk()->assertSee('Reversed');
 });
 
+it('leaves a paused fee item off new invoices but keeps its amounts', function () {
+    $admin = memberOf($this->school);
+
+    $this->actingAs($admin)->post(route('school.fees.items.toggle', [$this->school, $this->levy]))->assertSessionHas('status');
+    expect($this->levy->fresh()->is_active)->toBeFalse();
+
+    // Saving the schedule (which no longer shows the levy) keeps the levy's amounts.
+    $this->actingAs($admin)->put(route('school.fees.schedule.update', $this->school), [
+        'term_id' => $this->term->id,
+        'amounts' => [$this->jss1->id => [$this->tuition->id => '160,000']],
+    ])->assertSessionHasNoErrors();
+    expect(inSchool($this->school, fn () => FeeStructure::query()->where('fee_item_id', $this->levy->id)->count()))->toBe(1);
+
+    ($this->issue)();
+    $invoice = ($this->invoice)();
+    expect($invoice->total)->toBe(160_000_00)
+        ->and($invoice->lines->pluck('description')->all())->toBe(['Tuition']);
+
+    $this->actingAs($admin)->get(route('school.fees.setup', $this->school))->assertSee('Paused');
+});
+
+it('edits and removes invoice lines, keeping the balance right', function () {
+    ($this->issue)();
+    ($this->pay)('150,000');
+    $invoice = ($this->invoice)();
+    [$tuition, $levy] = [$invoice->lines->firstWhere('description', 'Tuition'), $invoice->lines->firstWhere('description', 'Development levy')];
+
+    $this->actingAs($this->bursar)->patch(route('school.invoices.lines.update', [$this->school, $invoice, $tuition]), ['description' => 'Tuition (scholarship rate)', 'amount' => '100,000'])
+        ->assertSessionHasNoErrors();
+    $invoice->refresh();
+    expect($invoice->total)->toBe(120_000_00)->and($invoice->status)->toBe(InvoiceStatus::Paid);
+
+    $this->actingAs($this->bursar)->delete(route('school.invoices.lines.destroy', [$this->school, $invoice, $levy]))->assertSessionHasNoErrors();
+    expect($invoice->fresh()->total)->toBe(100_000_00);
+
+    $this->actingAs($this->bursar)->delete(route('school.invoices.lines.destroy', [$this->school, $invoice, $tuition]))->assertSessionHasErrors('line');
+
+    $this->actingAs($this->bursar)->patch(route('school.invoices.update', [$this->school, $invoice]), ['due_on' => '2026-12-01', 'notes' => 'Pay into GTBank 0123456789'])
+        ->assertSessionHasNoErrors();
+    $this->actingAs($this->bursar)->get(route('school.invoices.print', [$this->school, $invoice]))->assertSee('GTBank 0123456789');
+
+    $other = enrol($this->school, 'JSS 1', 'A');
+    $otherInvoice = inSchool($this->school, function () use ($other) {
+        app(GenerateInvoices::class)->handle($this->term);
+
+        return Invoice::query()->where('student_id', $other->student->id)->sole();
+    });
+    $this->actingAs($this->bursar)->patch(route('school.invoices.lines.update', [$this->school, $otherInvoice, $tuition]), ['description' => 'X', 'amount' => '1'])->assertNotFound();
+});
+
+it('prints a school-branded invoice for the bursary and the family only', function () {
+    ($this->issue)();
+    $print = route('school.invoices.print', [$this->school, ($this->invoice)()]);
+
+    $this->actingAs($this->bursar)->get($print)->assertOk()
+        ->assertSee('School fees invoice')->assertSee('Powered by')->assertSee('One hundred and seventy thousand naira only');
+    $this->actingAs($this->aisha->guardian->user)->get($print)->assertOk();
+    $this->actingAs(enrol($this->school, 'JSS 1', 'A')->guardian->user)->get($print)->assertForbidden();
+    $this->actingAs(staffOf($this->school)->user)->get($print)->assertForbidden();
+});
+
 it('prints a receipt in words for staff and the family only', function () {
     ($this->issue)();
     ($this->pay)('170,000');
@@ -184,4 +246,40 @@ it('shows a parent the balance in the portal', function () {
         ->assertOk()
         ->assertSee('Fees outstanding')
         ->assertSee('Pay at the school bursary');
+});
+
+it('lets a student see their own fees without an online pay button', function () {
+    ($this->issue)();
+    ($this->pay)('100,000');
+
+    $this->actingAs($this->student->user)->get(route('school.portal', $this->school))
+        ->assertOk()
+        ->assertSee('Fees')
+        ->assertSee('Fees outstanding')
+        ->assertSee('Ask a parent or guardian')
+        ->assertDontSee('Pay ₦70,000 online');
+});
+
+
+
+it('edits a fee item’s name, type and what each class pays in one go', function () {
+    $admin = memberOf($this->school);
+    $jss2 = inSchool($this->school, fn () => ClassLevel::query()->where('name', 'JSS 2')->sole());
+
+    $this->actingAs($admin)->patch(route('school.fees.items.update', [$this->school, $this->levy]), [
+        'name' => 'Building levy', 'is_optional' => 0, 'is_active' => 1, 'term_id' => $this->term->id, 'item_id' => $this->levy->id,
+        'amounts' => [$this->jss1->id => '22,500', $jss2->id => '25,000'],
+    ])->assertSessionHasNoErrors();
+
+    expect($this->levy->fresh()->name)->toBe('Building levy');
+    inSchool($this->school, function () use ($jss2) {
+        expect(FeeStructure::query()->where('fee_item_id', $this->levy->id)->where('term_id', $this->term->id)->pluck('amount', 'class_level_id')->all())
+            ->toBe([$this->jss1->id => 22_500_00, $jss2->id => 25_000_00]);
+    });
+
+    $this->actingAs($admin)->patch(route('school.fees.items.update', [$this->school, $this->levy]), [
+        'name' => 'Building levy', 'is_active' => 1, 'term_id' => $this->term->id, 'item_id' => $this->levy->id, 'amounts' => [$this->jss1->id => 'lots'],
+    ])->assertSessionHasErrorsIn('editItem', 'amounts.'.$this->jss1->id);
+
+    $this->actingAs($admin)->get(route('school.fees.setup', $this->school))->assertOk()->assertSee('Building levy')->assertSee('₦22,500 – ₦25,000');
 });

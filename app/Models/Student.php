@@ -26,7 +26,7 @@ use Illuminate\Support\Str;
 #[Fillable([
     'user_id', 'admission_no', 'first_name', 'middle_name', 'last_name', 'gender', 'date_of_birth',
     'state_of_origin', 'lga', 'religion', 'blood_group', 'genotype', 'address', 'previous_school',
-    'medical_notes', 'admitted_on', 'status',
+    'medical_notes', 'photo_path', 'admitted_on', 'status',
 ])]
 class Student extends Model
 {
@@ -125,6 +125,11 @@ class Student extends Model
     public function initials(): string
     {
         return Str::upper(Str::substr($this->first_name, 0, 1).Str::substr($this->last_name, 0, 1));
+    }
+
+    public function photoUrl(): ?string
+    {
+        return $this->photo_path ? route('school.photos.student', [$this, 'v' => substr(md5($this->photo_path), 0, 8)]) : null;
     }
 
     public function age(): ?int

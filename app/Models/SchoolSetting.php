@@ -6,10 +6,30 @@ use App\Support\Tenancy\BelongsToSchool;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * Key/value preferences for one school. Values are JSON; defaults live in config/taaleem.php.
+ */
 #[Fillable(['key', 'value'])]
 class SchoolSetting extends Model
 {
     use BelongsToSchool;
+
+    /**
+     * Keys the Settings screen and the app know about.
+     *
+     * @return list<string>
+     */
+    public static function knownKeys(): array
+    {
+        return [
+            'admissions_open',
+            'show_positions',
+            'promotion_pass_mark',
+            'paystack_subaccount',
+            'currency',
+            'date_format',
+        ];
+    }
 
     /**
      * @return array<string, string>

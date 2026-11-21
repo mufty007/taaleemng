@@ -81,3 +81,56 @@ it('only lets someone with the publish permission release results', function () 
     $this->actingAs(memberOf($this->school, SchoolRole::Bursar))->post(route('school.results.publish', [$this->school, $this->arm]))->assertForbidden();
     $this->actingAs($this->parent)->post(route('school.results.publish', [$this->school, $this->arm]))->assertForbidden();
 });
+
+it('shows results so far, without grades or positions, until the exam is in', function () {
+    $admin = memberOf($this->school);
+    $other = enrol($this->school, 'JSS 1', 'A', ['first_name' => 'Chidi'])->student;
+
+    $exam = inSchool($this->school, function () use ($other) {
+        $exam = AssessmentComponent::query()->orderByDesc('max_score')->first();
+        $mathsId = $this->arm->classSubjects()->first()->id;
+        $english = $this->arm->classSubjects()->skip(1)->first();
+
+        // A second subject with only the CAs in, for both students.
+        foreach (AssessmentComponent::query()->whereKeyNot($exam->id)->get() as $component) {
+            foreach ([$this->student, $other] as $student) {
+                Score::query()->create([
+                    'term_id' => $this->term->id, 'enrolment_id' => $student->currentEnrolment->id, 'class_subject_id' => $english->id,
+                    'assessment_component_id' => $component->id, 'score' => $component->max_score / 2,
+                ]);
+            }
+        }
+
+        return $exam;
+    });
+
+    $this->actingAs($admin)->get($this->reportCard)
+        ->assertOk()
+        ->assertSee('Results so far')
+        ->assertSee('not the final report')
+        ->assertSee('In progress')
+        ->assertSee('50%')
+        ->assertDontSee('Position');
+
+    $this->actingAs($admin)->get(route('school.results.show', [$this->school, $this->arm]))
+        ->assertOk()->assertSee('Results so far.')->assertSee('Publish results so far');
+
+    // Once every score is in, it is a report card again with grades and positions.
+    inSchool($this->school, function () use ($exam, $other) {
+        $english = $this->arm->classSubjects()->skip(1)->first();
+
+        foreach ([$this->student, $other] as $student) {
+            Score::query()->create([
+                'term_id' => $this->term->id, 'enrolment_id' => $student->currentEnrolment->id, 'class_subject_id' => $english->id,
+                'assessment_component_id' => $exam->id, 'score' => 40,
+            ]);
+        }
+
+        Score::query()->create([
+            'term_id' => $this->term->id, 'enrolment_id' => $other->currentEnrolment->id, 'class_subject_id' => $this->arm->classSubjects()->first()->id,
+            'assessment_component_id' => $exam->id, 'score' => 30,
+        ]);
+    });
+
+    $this->actingAs($admin)->get($this->reportCard)->assertOk()->assertSee('Report card')->assertDontSee('In progress')->assertSee('Position');
+});

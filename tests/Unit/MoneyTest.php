@@ -34,3 +34,13 @@ it('writes amounts in words for receipts', function (int $kobo, string $expected
     [5_050, 'Fifty naira, fifty kobo only'],
     [0, 'Zero naira only'],
 ]);
+
+it('shortens amounts for chart labels', function (int $kobo, string $expected) {
+    expect(Money::compact($kobo))->toBe($expected);
+})->with([
+    [0, '₦0'],
+    [85_000, '₦850'],
+    [85_000_000, '₦850k'],
+    [120_000_000, '₦1.2m'],
+    [300_000_000, '₦3m'],
+]);

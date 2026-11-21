@@ -29,12 +29,20 @@
                     @if ($publication)
                         <x-button variant="secondary" icon="eye">Published · withdraw</x-button>
                     @else
-                        <x-button variant="brand" icon="check">Publish to parents</x-button>
+                        <x-button variant="brand" icon="check">{{ $results->isComplete() ? 'Publish to parents' : 'Publish results so far' }}</x-button>
                     @endif
                 </form>
             @endcan
         </x-slot:actions>
     </x-page-header>
+
+    @unless ($results->isComplete())
+        @php($missing = $results->missingComponents())
+        <div class="rounded-2xl border border-gold-200 bg-gold-50 px-5 py-3 text-[15px] text-gold">
+            <span class="font-semibold">Results so far.</span>
+            {{ $missing->isNotEmpty() ? $missing->pluck('name')->join(', ', ' and ').' scores are not in yet' : 'Some scores are not in yet' }}, so subjects still missing scores show marks out of what has been set, and report cards say “Results so far” with no grades or positions until every score is in.
+        </div>
+    @endunless
 
     <x-tabs :tabs="['ranking' => 'Positions', 'broadsheet' => 'Broadsheet', 'subjects' => 'Subject summary']" label="Results views">
         <x-tab name="ranking">
@@ -48,6 +56,7 @@
                                 <th scope="col" class="px-3 py-3 text-right font-semibold">Subjects</th>
                                 <th scope="col" class="px-3 py-3 text-right font-semibold">Total</th>
                                 <th scope="col" class="px-3 py-3 text-right font-semibold">Average</th>
+                                <th scope="col" class="px-3 py-3 text-right font-semibold">% so far</th>
                                 <th scope="col" class="px-5 py-3 text-right font-semibold"><span class="sr-only">Report card</span></th>
                             </tr>
                         </thead>
@@ -58,10 +67,11 @@
                                     <td class="px-3 py-3 font-medium">{{ $row['student']->registerName() }}</td>
                                     <td class="px-3 py-3 text-right">{{ $row['subject_count'] }}</td>
                                     <td class="px-3 py-3 text-right">{{ $row['total'] }}</td>
-                                    <td class="px-3 py-3 text-right font-semibold">{{ $row['average'] ?? '—' }}</td>
+                                    <td class="px-3 py-3 text-right font-semibold">{{ $row['complete'] ? ($row['average'] ?? '—') : '—' }}</td>
+                                    <td class="px-3 py-3 text-right text-muted">{{ $row['percent'] !== null ? $row['percent'].'%' : '—' }}</td>
                                     <td class="px-5 py-3 text-right">
                                         @if ($row['subject_count'] > 0)
-                                            <a data-native href="{{ route('school.results.report', [$row['student'], 'term' => $term->id]) }}" class="inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:text-ink">Report card <x-lucide-arrow-right class="size-4" aria-hidden="true" /></a>
+                                            <a data-native href="{{ route('school.results.report', [$row['student'], 'term' => $term->id]) }}" class="inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:text-ink">{{ $row['complete'] ? 'Report card' : 'Results so far' }} <x-lucide-arrow-right class="size-4" aria-hidden="true" /></a>
                                         @endif
                                     </td>
                                 </tr>
@@ -93,9 +103,12 @@
                                     @foreach ($results->classSubjects as $classSubject)
                                         @php($cell = $row['subjects'][$classSubject->id] ?? null)
                                         <td class="px-2 py-2 text-center">
-                                            @if ($cell)
-                                                <span @class(['block font-semibold', 'text-danger' => ! $results->scheme->isCredit($cell['grade'])]) title="{{ $cell['remark'] }}{{ $cell['complete'] ? '' : ' (incomplete)' }}">{{ $cell['total'] }}</span>
-                                                <span class="block text-[11px] text-muted">{{ $cell['grade'] }}{{ $cell['complete'] ? '' : '*' }}</span>
+                                            @if ($cell && ! $cell['complete'])
+                                                <span class="block font-semibold text-muted" title="So far: {{ $cell['total'] }} out of {{ $cell['max'] }}">{{ $cell['total'] }}<span class="text-[11px] font-normal">/{{ $cell['max'] }}</span></span>
+                                                <span class="block text-[11px] text-muted">{{ round($cell['percent']) }}%*</span>
+                                            @elseif ($cell)
+                                                <span @class(['block font-semibold', 'text-danger' => ! $results->scheme->isCredit($cell['grade'])]) title="{{ $cell['remark'] }}">{{ $cell['total'] }}</span>
+                                                <span class="block text-[11px] text-muted">{{ $cell['grade'] }}</span>
                                             @else
                                                 <span class="text-muted">·</span>
                                             @endif
@@ -108,7 +121,7 @@
                         </tbody>
                     </table>
                 </div>
-                <p class="m-0 border-t border-line px-5 py-3 text-sm text-muted">* Not all of CA1, CA2 and the exam have been entered yet. Grades in red are below a credit.</p>
+                <p class="m-0 border-t border-line px-5 py-3 text-sm text-muted">* So far: not every score is in, so the mark is out of what has been set and there is no grade yet. Grades in red are below a credit.</p>
             </x-card>
         </x-tab>
 

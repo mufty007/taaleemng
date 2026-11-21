@@ -8,7 +8,11 @@
     <x-credentials />
 
     <div class="flex flex-wrap items-center gap-5 rounded-3xl border border-line bg-white p-6" data-enter>
-        <span class="grid size-20 flex-none place-items-center rounded-3xl bg-ink text-2xl font-bold text-white">{{ \Illuminate\Support\Str::upper(substr($staff->first_name, 0, 1).substr($staff->last_name, 0, 1)) }}</span>
+        @can('staff.manage')
+            <x-photo-upload :person="$staff" :action="route('school.staff.photo', $staff)" :name="$staff->fullName()" />
+        @else
+            <x-avatar :person="$staff" class="size-20 rounded-3xl text-2xl" />
+        @endcan
         <div class="min-w-0 flex-1">
             <h1 class="m-0 text-[28px] leading-tight font-bold tracking-[-0.03em]">{{ $staff->fullName() }}</h1>
             <div class="mt-1.5 flex flex-wrap items-center gap-2 text-[15px] text-muted">
@@ -18,6 +22,9 @@
                 <x-badge :tone="$staff->status === \App\Enums\StaffStatus::Active ? 'naija' : 'neutral'">{{ $staff->status->label() }}</x-badge>
             </div>
         </div>
+        @can('staff.manage')
+            <x-button variant="soft" icon="pencil" :href="route('school.staff.edit', $staff)">Edit</x-button>
+        @endcan
     </div>
 
     <div class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
@@ -58,6 +65,16 @@
                 <dd class="m-0 font-medium">{{ $staff->date_employed?->format('d/m/Y') ?? '—' }}</dd>
                 <dt class="text-muted">Qualification</dt>
                 <dd class="m-0 font-medium">{{ $staff->qualification ?? '—' }}</dd>
+                <dt class="text-muted">Basic salary</dt>
+                <dd class="m-0 font-medium">{{ $staff->basic_salary ? \App\Support\Money::format($staff->basic_salary).'/month' : 'Not set' }}</dd>
+                @if ($staff->basic_salary)
+                    <dt class="text-muted">Allowances</dt>
+                    <dd class="m-0 font-medium">{{ \App\Support\Money::format($staff->allowances) }}</dd>
+                    <dt class="text-muted">Deductions</dt>
+                    <dd class="m-0 font-medium">{{ \App\Support\Money::format($staff->deductions) }}</dd>
+                    <dt class="text-muted">Bank</dt>
+                    <dd class="m-0 font-medium">{{ $staff->bank_name ? $staff->bank_name.($staff->bank_account_number ? ' · '.$staff->bank_account_number : '') : '—' }}</dd>
+                @endif
                 <dt class="text-muted">Login</dt>
                 <dd class="m-0 font-medium">
                     @if ($staff->user)

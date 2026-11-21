@@ -7,10 +7,8 @@ use App\Http\Controllers\Controller;
 use App\Models\AcademicSession;
 use App\Models\AttendanceRecord;
 use App\Models\ClassArm;
-use App\Models\Enrolment;
-use App\Models\Term;
 use App\Models\User;
-use App\Support\Attendance\AttendanceSummary;
+use App\Support\Attendance\ClassRegister;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -58,7 +56,7 @@ class AttendanceController extends Controller
 
         return view('school.attendance.index', [
             'date' => $date,
-            'term' => $this->termFor($date),
+            'term' => ClassRegister::termFor($date),
             'arms' => $arms,
             'counts' => $counts,
         ]);
@@ -67,15 +65,10 @@ class AttendanceController extends Controller
     public function register(Request $request, ClassArm $classArm): View
     {
         $this->authorizeRegister($request->user(), $classArm);
-        $date = $this->date($request);
-        $term = $this->termFor($date);
         $classArm->load(['level', 'formTeacher']);
+        $register = ClassRegister::for($classArm, $this->date($request));
 
-        $enrolments = $this->enrolments($classArm, $term);
-        $records = AttendanceRecord::query()->where('class_arm_id', $classArm->id)->whereDate('date', $date)->get()->keyBy('enrolment_id');
-        $summary = $term ? AttendanceSummary::forTerm($term, $enrolments->pluck('id')->all()) : [];
-
-        $monday = $date->copy()->startOfWeek(Carbon::MONDAY);
+        $monday = $register->date->copy()->startOfWeek(Carbon::MONDAY);
         $marked = AttendanceRecord::query()
             ->where('class_arm_id', $classArm->id)
             ->whereBetween('date', [$monday->toDateString(), $monday->copy()->addDays(4)->toDateString()])
@@ -86,20 +79,11 @@ class AttendanceController extends Controller
 
         return view('school.attendance.register', [
             'arm' => $classArm,
-            'date' => $date,
-            'term' => $term,
+            'register' => $register,
+            'date' => $register->date,
+            'term' => $register->term,
             'week' => collect(range(0, 4))->map(fn (int $offset) => $monday->copy()->addDays($offset)),
             'marked' => $marked,
-            'statuses' => AttendanceStatus::cases(),
-            'rows' => $enrolments->map(fn (Enrolment $enrolment) => [
-                'enrolment' => $enrolment->id,
-                'name' => $enrolment->student->registerName(),
-                'admission_no' => $enrolment->student->admission_no,
-                'status' => $records->get($enrolment->id)?->status->value,
-                'note' => $records->get($enrolment->id)->note ?? '',
-                'rate' => $summary[$enrolment->id]['rate'] ?? null,
-            ])->values(),
-            'locked' => $term === null || $term->isClosed() || $date->isFuture() || $date->isWeekend(),
         ]);
     }
 
@@ -112,7 +96,7 @@ class AttendanceController extends Controller
         $this->authorizeRegister($user, $classArm);
 
         $date = Carbon::parse((string) $request->input('date'))->startOfDay();
-        $term = $this->termFor($date);
+        $term = ClassRegister::termFor($date);
 
         if ($term === null || $date->isWeekend() || $date->isFuture()) {
             throw ValidationException::withMessages(['date' => 'The register can only be taken on a school day within a term, up to today.']);
@@ -122,7 +106,7 @@ class AttendanceController extends Controller
             throw ValidationException::withMessages(['date' => "{$term->name} is closed. Ask an admin to reopen it to change the register."]);
         }
 
-        $enrolmentIds = $this->enrolments($classArm, $term)->pluck('id')->all();
+        $enrolmentIds = ClassRegister::enrolments($classArm, $term)->pluck('id')->all();
 
         $data = $request->validate([
             'date' => ['required', 'date'],
@@ -155,39 +139,8 @@ class AttendanceController extends Controller
         abort_unless(self::canTake($user, $classArm), 403);
     }
 
-    /**
-     * @return Collection<int, Enrolment>
-     */
-    private function enrolments(ClassArm $classArm, ?Term $term): Collection
-    {
-        $sessionId = $term->academic_session_id ?? AcademicSession::current()->id ?? 0;
-
-        return Enrolment::query()
-            ->with('student')
-            ->where('class_arm_id', $classArm->id)
-            ->where('academic_session_id', $sessionId)
-            ->get()
-            ->sortBy(fn (Enrolment $enrolment) => $enrolment->student->last_name.' '.$enrolment->student->first_name)
-            ->values();
-    }
-
-    private function termFor(Carbon $date): ?Term
-    {
-        return Term::query()->with('academicSession')
-            ->whereDate('starts_on', '<=', $date)
-            ->whereDate('ends_on', '>=', $date)
-            ->first();
-    }
-
     private function date(Request $request): Carbon
     {
-        try {
-            $date = $request->filled('date') ? Carbon::parse((string) $request->query('date')) : today();
-        } catch (\Throwable) {
-            $date = today();
-        }
-
-        // Weekends open on the Friday before.
-        return $date->isWeekend() ? $date->previous(Carbon::FRIDAY) : $date->startOfDay();
+        return ClassRegister::schoolDay((string) $request->query('date'));
     }
 }

@@ -37,7 +37,8 @@ class FeeSetupController extends Controller
             'items' => $items,
             'levels' => $levels,
             'amounts' => $amounts,
-            'levelTotals' => $levels->mapWithKeys(fn (ClassLevel $level) => [$level->id => $items->reject(fn (FeeItem $item) => $item->is_optional)->sum(fn (FeeItem $item) => $amounts["{$level->id}-{$item->id}"] ?? 0)]),
+            'scheduleItems' => $items->where('is_active', true)->values(),
+            'levelTotals' => $levels->mapWithKeys(fn (ClassLevel $level) => [$level->id => $items->reject(fn (FeeItem $item) => $item->is_optional || ! $item->is_active)->sum(fn (FeeItem $item) => $amounts["{$level->id}-{$item->id}"] ?? 0)]),
             'itemsInUse' => InvoiceLine::query()->whereNotNull('fee_item_id')->distinct()->pluck('fee_item_id')->flip(),
         ]);
     }
@@ -59,11 +60,61 @@ class FeeSetupController extends Controller
         $data = $request->validateWithBag('editItem', [
             'name' => ['required', 'string', 'max:60', TenantRule::unique('fee_items', 'name')->ignore($feeItem->id)],
             'is_optional' => ['boolean'],
+            'is_active' => ['boolean'],
+            'term_id' => ['nullable', TenantRule::exists('terms')],
+            'amounts' => ['array'],
+            'amounts.*' => ['nullable', 'string', 'max:20', 'regex:/^[₦\s\d,]*(\.\d{1,2})?$/u'],
+        ], ['amounts.*.regex' => 'Amounts must be numbers, e.g. 185,000.']);
+
+        $feeItem->update([
+            'name' => $data['name'],
+            'is_optional' => (bool) ($data['is_optional'] ?? false),
+            'is_active' => (bool) ($data['is_active'] ?? $feeItem->is_active),
         ]);
 
-        $feeItem->update(['name' => $data['name'], 'is_optional' => (bool) ($data['is_optional'] ?? false)]);
+        if (! empty($data['term_id']) && $request->has('amounts')) {
+            $levelIds = ClassLevel::query()->pluck('id')->flip();
+            $rows = [];
+
+            foreach ($data['amounts'] ?? [] as $levelId => $typed) {
+                if (! $levelIds->has((int) $levelId) || blank($typed)) {
+                    continue;
+                }
+
+                $amount = Money::toKobo($typed);
+
+                if ($amount > 100_000_000_00) {
+                    throw ValidationException::withMessages(["amounts.{$levelId}" => 'That amount is too large.'])->errorBag('editItem');
+                }
+
+                $rows[] = ['class_level_id' => (int) $levelId, 'amount' => $amount];
+            }
+
+            DB::transaction(function () use ($feeItem, $data, $rows): void {
+                FeeStructure::query()->where('term_id', $data['term_id'])->where('fee_item_id', $feeItem->id)->delete();
+
+                foreach ($rows as $row) {
+                    FeeStructure::query()->create(['term_id' => $data['term_id'], 'fee_item_id' => $feeItem->id, ...$row]);
+                }
+            });
+        }
+
+        activity('fees')->performedOn($feeItem)->log("updated the fee item {$feeItem->name}");
 
         return back()->with('status', "{$feeItem->name} saved.");
+    }
+
+    /**
+     * Pause an item (left off the schedule and new invoices) or turn it back on.
+     */
+    public function toggleItem(FeeItem $feeItem): RedirectResponse
+    {
+        $feeItem->update(['is_active' => ! $feeItem->is_active]);
+        activity('fees')->performedOn($feeItem)->log(($feeItem->is_active ? 'turned on the fee item ' : 'paused the fee item ').$feeItem->name);
+
+        return back()->with('status', $feeItem->is_active
+            ? "{$feeItem->name} is on again. It will be billed on new invoices."
+            : "{$feeItem->name} is paused. Existing invoices keep it; new invoices leave it out.");
     }
 
     public function destroyItem(FeeItem $feeItem): RedirectResponse
@@ -102,7 +153,8 @@ class FeeSetupController extends Controller
         ], ['amounts.*.*.regex' => 'Amounts must be numbers, e.g. 185,000.']);
 
         $levelIds = ClassLevel::query()->pluck('id')->flip();
-        $itemIds = FeeItem::query()->pluck('id')->flip();
+        // Paused items are not on the form, so their amounts are left as they are.
+        $itemIds = FeeItem::query()->where('is_active', true)->pluck('id')->flip();
         $rows = [];
 
         foreach ($data['amounts'] ?? [] as $levelId => $byItem) {
@@ -123,8 +175,8 @@ class FeeSetupController extends Controller
 
         $term = Term::query()->findOrFail($data['term_id']);
 
-        DB::transaction(function () use ($term, $rows): void {
-            FeeStructure::query()->where('term_id', $term->id)->delete();
+        DB::transaction(function () use ($term, $rows, $itemIds): void {
+            FeeStructure::query()->where('term_id', $term->id)->whereIn('fee_item_id', $itemIds->keys())->delete();
 
             foreach ($rows as $row) {
                 FeeStructure::query()->create(['term_id' => $term->id, ...$row]);

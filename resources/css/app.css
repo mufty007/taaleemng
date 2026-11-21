@@ -126,3 +126,28 @@
         transition-duration: 0.01ms !important;
     }
 }
+
+/* Printed documents: report cards, receipts, invoices and ID cards keep their Ta'aleem colours on paper. */
+@media print {
+    html {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    body {
+        background: white !important;
+    }
+
+    .no-print {
+        display: none !important;
+    }
+
+    .sheet {
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+    }
+}

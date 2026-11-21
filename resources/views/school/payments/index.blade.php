@@ -78,7 +78,7 @@
                                         @endif
                                         @can('payments.record')
                                             @if ($payment->status === PaymentStatus::Confirmed)
-                                                <x-button variant="ghost" size="sm" icon="undo-2" type="button" x-data x-on:click="$dispatch('edit-reverse', { action: @js(route('school.payments.reverse', $payment)), values: { receipt: @js($payment->receipt_no), amount: @js(Money::format($payment->amount)) } })">Reverse</x-button>
+                                                <x-button variant="ghost" size="sm" icon="undo-2" type="button" x-data x-on:click="$dispatch('edit-reverse', { action: {{ \Illuminate\Support\Js::from(route('school.payments.reverse', $payment)) }}, values: { receipt: {{ \Illuminate\Support\Js::from($payment->receipt_no) }}, amount: {{ \Illuminate\Support\Js::from(Money::format($payment->amount)) }} } })">Reverse</x-button>
                                             @endif
                                         @endcan
                                     </div>

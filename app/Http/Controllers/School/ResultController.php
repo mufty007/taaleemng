@@ -7,6 +7,7 @@ use App\Models\ClassArm;
 use App\Models\Enrolment;
 use App\Models\ReportTrait;
 use App\Models\ResultPublication;
+use App\Models\SchoolSetting;
 use App\Models\Student;
 use App\Models\Term;
 use App\Models\TermReport;
@@ -120,6 +121,7 @@ class ResultController extends Controller
             'nextLevel' => $isFinalTerm ? $enrolment->classArm->level->nextLevel() : null,
             'register' => AttendanceSummary::forTerm($term, [$enrolment->id])[$enrolment->id],
             'registerDays' => AttendanceSummary::daysTaken($term, $enrolment->class_arm_id),
+            'showPositions' => (bool) SchoolSetting::valueFor('show_positions'),
         ]);
     }
 

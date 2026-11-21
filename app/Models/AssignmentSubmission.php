@@ -13,8 +13,9 @@ use Illuminate\Support\Carbon;
  *
  * @property Carbon $submitted_at
  * @property Carbon|null $marked_at
+ * @property list<array{path: string, name: string, size: int, mime: string}>|null $files
  */
-#[Fillable(['assignment_id', 'student_id', 'body', 'submitted_at', 'score', 'feedback', 'marked_by', 'marked_at'])]
+#[Fillable(['assignment_id', 'student_id', 'body', 'files', 'submitted_at', 'score', 'feedback', 'marked_by', 'marked_at'])]
 class AssignmentSubmission extends Model
 {
     use BelongsToSchool;
@@ -28,6 +29,7 @@ class AssignmentSubmission extends Model
             'submitted_at' => 'datetime',
             'marked_at' => 'datetime',
             'score' => 'float',
+            'files' => 'array',
         ];
     }
 
@@ -45,5 +47,18 @@ class AssignmentSubmission extends Model
     public function assignment(): BelongsTo
     {
         return $this->belongsTo(Assignment::class);
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function marker(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'marked_by');
+    }
+
+    public function isLate(Assignment $assignment): bool
+    {
+        return $this->submitted_at->gt($assignment->due_at);
     }
 }

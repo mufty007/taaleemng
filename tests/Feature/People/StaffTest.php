@@ -76,3 +76,50 @@ it('shows the staff list and profile to the principal but not to teachers', func
     $this->actingAs($principal)->get(route('school.staff.create', $this->school))->assertForbidden();
     $this->actingAs($staff->user)->get(route('school.staff.index', $this->school))->assertForbidden();
 });
+
+it('lets an admin edit a staff member’s details and role', function () {
+    $staff = staffOf($this->school, attributes: [
+        'first_name' => 'Emeka',
+        'last_name' => 'Okonkwo',
+        'email' => 'emeka@greenfield.test',
+        'phone' => '+2348035550101',
+        'designation' => 'Mathematics Teacher',
+    ]);
+
+    $this->actingAs($this->admin)
+        ->get(route('school.staff.edit', [$this->school, $staff]))
+        ->assertOk()
+        ->assertSee('Emeka');
+
+    $this->actingAs($this->admin)
+        ->put(route('school.staff.update', [$this->school, $staff]), [
+            'title' => 'Mrs.',
+            'first_name' => 'Ngozi',
+            'last_name' => 'Okonkwo',
+            'gender' => 'female',
+            'email' => 'ngozi@greenfield.test',
+            'phone' => '0803 555 0101',
+            'designation' => 'Bursar',
+            'department' => 'Accounts',
+            'employment_type' => 'full_time',
+            'status' => 'active',
+            'role' => 'bursar',
+        ])
+        ->assertRedirect(route('school.staff.show', [$this->school, $staff]));
+
+    $staff->refresh();
+
+    expect($staff->first_name)->toBe('Ngozi')
+        ->and($staff->designation)->toBe('Bursar')
+        ->and($staff->email)->toBe('ngozi@greenfield.test')
+        ->and($staff->user->email)->toBe('ngozi@greenfield.test');
+
+    inSchool($this->school, fn () => expect($staff->user->fresh()->hasRole(SchoolRole::Bursar))->toBeTrue());
+});
+
+it('does not let a principal edit staff without staff.manage', function () {
+    $staff = staffOf($this->school);
+    $principal = memberOf($this->school, SchoolRole::Principal);
+
+    $this->actingAs($principal)->get(route('school.staff.edit', [$this->school, $staff]))->assertForbidden();
+});

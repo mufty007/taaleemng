@@ -17,6 +17,7 @@ use App\Models\QuizQuestion;
 use App\Models\Term;
 use App\Models\User;
 use App\Support\Classwork\ClassworkAccess;
+use App\Support\Files\StoredFiles;
 use App\Support\Tenancy\TenantRule;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
@@ -221,13 +222,15 @@ class ClassworkController extends Controller
             'due_at' => ['required', 'date', 'after:now'],
             'max_score' => ['nullable', 'integer', 'between:1,100'],
             'publish' => ['boolean'],
+            ...StoredFiles::rules('files'),
         ]);
 
         $classSubject = ClassSubject::query()->findOrFail($data['class_subject_id']);
         $this->authorizeSubject($request->user(), $classSubject);
 
         $assignment = Assignment::query()->create([
-            ...Arr::except($data, 'publish'),
+            ...Arr::except($data, ['publish', 'files']),
+            'files' => $request->hasFile('files') ? StoredFiles::store($request->file('files'), 'schools/'.$classSubject->school_id.'/assignments') : null,
             'term_id' => $this->termId(),
             'created_by' => $request->user()->id,
             'status' => ($data['publish'] ?? true) ? ClassworkStatus::Published : ClassworkStatus::Draft,
@@ -255,6 +258,31 @@ class ClassworkController extends Controller
         ]);
     }
 
+    /**
+     * One student's handed-in work, opened beside the marking form.
+     */
+    public function showSubmission(Request $request, AssignmentSubmission $submission): View
+    {
+        $assignment = $submission->assignment;
+        $this->authorizeSubject($request->user(), $assignment->classSubject);
+        $assignment->load(['classSubject.subject', 'classSubject.classArm.level']);
+
+        $all = $assignment->submissions()->with('student')->get()
+            ->sortBy(fn (AssignmentSubmission $other) => $other->student->last_name.' '.$other->student->first_name)
+            ->values();
+        $position = $all->search(fn (AssignmentSubmission $other) => $other->is($submission));
+
+        return view('school.classwork.submission', [
+            'assignment' => $assignment,
+            'submission' => $submission->load(['student', 'marker']),
+            'previous' => $position > 0 ? $all[$position - 1] : null,
+            'next' => $all[$position + 1] ?? null,
+            'position' => $position + 1,
+            'count' => $all->count(),
+            'unmarked' => $all->whereNull('marked_at')->count(),
+        ]);
+    }
+
     public function markSubmission(Request $request, AssignmentSubmission $submission): RedirectResponse
     {
         $assignment = $submission->assignment;
@@ -267,7 +295,17 @@ class ClassworkController extends Controller
 
         $submission->update([...$data, 'marked_by' => $request->user()->id, 'marked_at' => now()]);
 
-        return back()->with('status', 'Marked.');
+        if ($request->boolean('next')) {
+            $next = $assignment->submissions()->with('student')->whereNull('marked_at')->get()
+                ->sortBy(fn (AssignmentSubmission $other) => $other->student->last_name.' '.$other->student->first_name)
+                ->first();
+
+            return $next
+                ? to_route('school.classwork.submissions.show', $next)->with('status', "Marked {$submission->student->first_name}’s work. Here’s the next one.")
+                : to_route('school.classwork.assignments.show', $assignment)->with('status', 'All handed-in work is marked.');
+        }
+
+        return back()->with('status', "Marked {$submission->student->first_name}’s work.");
     }
 
     private function authorizeSubject(User $user, ClassSubject $classSubject): void

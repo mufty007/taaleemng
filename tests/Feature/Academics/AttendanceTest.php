@@ -95,3 +95,16 @@ it('labels each mark for the register', function () {
         ->and(AttendanceStatus::Excused->isPresent())->toBeFalse()
         ->and(AttendanceStatus::Absent->short())->toBe('A');
 });
+
+it('puts today’s register on the class page: editable for the form teacher, read-only for subject teachers', function () {
+    $subjectTeacher = staffOf($this->school);
+    inSchool($this->school, fn () => $this->arm->classSubjects()->first()->update(['teacher_id' => $subjectTeacher->id]));
+    ($this->save)($this->formTeacher->user, [['enrolment' => $this->enrolments[0], 'status' => 'absent']])->assertOk();
+
+    $this->actingAs($this->formTeacher->user)->get(route('school.classes.show', [$this->school, $this->arm]))
+        ->assertOk()->assertSee('Today’s register')->assertSee('Mark the rest present')->assertSee('BELLO Aisha');
+
+    $this->actingAs($subjectTeacher->user)->get(route('school.classes.show', [$this->school, $this->arm]))
+        ->assertOk()->assertSee('Today’s register')->assertDontSee('Mark the rest present')->assertSee('takes this class’s register');
+    ($this->save)($subjectTeacher->user, [['enrolment' => $this->enrolments[0], 'status' => 'present']])->assertForbidden();
+});

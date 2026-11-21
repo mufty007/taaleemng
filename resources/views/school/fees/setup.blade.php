@@ -18,7 +18,7 @@
 
     <x-tabs :tabs="['schedule' => 'Fee schedule', 'items' => ['label' => 'Fee items', 'count' => $items->count()]]" label="Fee setup">
         <x-tab name="schedule">
-            @if ($items->isEmpty())
+            @if ($scheduleItems->isEmpty() && $items->isEmpty())
                 <x-card>
                     <x-empty-state icon="receipt" title="No fee items yet" body="Start with the usual ones (Tuition, Development levy, PTA levy, Books, Exam fee, Sports), then add your own.">
                         <form method="POST" action="{{ route('school.fees.items.defaults') }}">
@@ -43,7 +43,7 @@
                                 <thead>
                                     <tr class="text-xs font-semibold text-muted">
                                         <th scope="col" class="sticky left-0 z-10 bg-white px-5 py-3 font-semibold uppercase">Class</th>
-                                        @foreach ($items as $item)
+                                        @foreach ($scheduleItems as $item)
                                             <th scope="col" class="min-w-32 px-2 py-3 font-semibold">
                                                 {{ $item->name }}
                                                 @if ($item->is_optional)<span class="block font-normal text-muted">optional</span>@endif
@@ -56,8 +56,8 @@
                                     @foreach ($levels as $level)
                                         <tr class="border-t border-line">
                                             <th scope="row" class="sticky left-0 z-10 bg-white px-5 py-2 text-left font-semibold whitespace-nowrap">{{ $level->name }}</th>
-                                            @foreach ($items as $item)
-                                                @php($key = "{$level->id}-{$item->id}")
+                                            @foreach ($scheduleItems as $item)
+                                                @php $key = "{$level->id}-{$item->id}"; @endphp
                                                 <td class="px-2 py-1.5">
                                                     <label for="amount-{{ $key }}" class="sr-only">{{ $item->name }} for {{ $level->name }}</label>
                                                     <div class="relative">
@@ -97,7 +97,7 @@
                         <x-button variant="brand" icon="check" form="schedule-form">Save {{ $term->name }} fees</x-button>
                     </div>
                 </x-card>
-                <p class="m-0 text-sm text-muted">Leave a cell blank if that class doesn’t pay the item. “Per term” adds up the compulsory items; optional items are added to a student’s invoice by hand.</p>
+                <p class="m-0 text-sm text-muted">Leave a cell blank if that class doesn’t pay the item. “Per term” adds up the compulsory items; optional items are added to a student’s invoice by hand. Paused items are hidden here and left off new invoices.</p>
             @endif
         </x-tab>
 
@@ -113,12 +113,39 @@
                     <table class="w-full border-collapse text-left text-[15px]">
                         <tbody>
                             @foreach ($items as $item)
+                                @php
+                                    $itemAmounts = $levels->mapWithKeys(fn ($level) => [$level->id => $amounts["{$level->id}-{$item->id}"] ?? null])->filter();
+                                    $editValues = [
+                                        'name' => $item->name,
+                                        'is_optional' => $item->is_optional,
+                                        'is_active' => $item->is_active,
+                                        'amounts' => $levels->mapWithKeys(fn ($level) => [$level->id => isset($itemAmounts[$level->id]) ? number_format($itemAmounts[$level->id] / 100) : ''])->all(),
+                                    ];
+                                @endphp
                                 <tr class="border-t border-line first:border-t-0">
-                                    <td class="px-5 py-3 font-medium">{{ $item->name }}</td>
-                                    <td class="px-3 py-3"><x-badge :tone="$item->is_optional ? 'neutral' : 'brand'">{{ $item->is_optional ? 'Optional' : 'Compulsory' }}</x-badge></td>
+                                    <td class="px-5 py-3">
+                                        <span class="block font-medium">{{ $item->name }}</span>
+                                        <span class="block text-sm text-muted">
+                                            @if ($itemAmounts->isEmpty())
+                                                No amount set for {{ $term?->name ?? 'this term' }}
+                                            @elseif ($itemAmounts->min() === $itemAmounts->max())
+                                                {{ Money::format($itemAmounts->min()) }} for {{ $itemAmounts->count() === $levels->count() ? 'every class' : $itemAmounts->count().' classes' }}
+                                            @else
+                                                {{ Money::format($itemAmounts->min()) }} – {{ Money::format($itemAmounts->max()) }} across {{ $itemAmounts->count() }} classes
+                                            @endif
+                                        </span>
+                                    </td>
+                                    <td class="px-3 py-3">
+                                        <x-badge :tone="$item->is_optional ? 'neutral' : 'brand'">{{ $item->is_optional ? 'Optional' : 'Compulsory' }}</x-badge>
+                                        @unless ($item->is_active)<x-badge tone="gold">Paused</x-badge>@endunless
+                                    </td>
                                     <td class="px-5 py-3">
                                         <div class="flex justify-end gap-1">
-                                            <x-button variant="ghost" size="sm" icon="pencil" type="button" x-data x-on:click="$dispatch('edit-item', { action: @js(route('school.fees.items.update', $item)), values: @js(['name' => $item->name, 'is_optional' => $item->is_optional]) })">Edit</x-button>
+                                            <form method="POST" action="{{ route('school.fees.items.toggle', $item) }}">
+                                                @csrf
+                                                <x-button variant="ghost" size="sm" :icon="$item->is_active ? 'pause' : 'play'">{{ $item->is_active ? 'Pause' : 'Turn on' }}</x-button>
+                                            </form>
+                                            <x-button variant="secondary" size="sm" icon="pencil" type="button" x-data x-on:click="$dispatch('edit-item', { action: {{ \Illuminate\Support\Js::from(route('school.fees.items.update', $item)) }}, values: {{ \Illuminate\Support\Js::from($editValues) }} })">Edit</x-button>
                                             @unless ($itemsInUse->has($item->id))
                                                 <form method="POST" action="{{ route('school.fees.items.destroy', $item) }}" onsubmit="return confirm('Delete {{ $item->name }}?')">
                                                     @csrf
@@ -150,22 +177,69 @@
         </form>
     </x-drawer>
 
-    <div x-data="editPanel('item')">
-        <x-drawer name="item" title="Edit fee item">
-            <form method="POST" :action="action" class="flex flex-col gap-4">
+    @php
+        // After a failed save, reopen the panel with what was typed.
+        $reopen = $errors->editItem->isNotEmpty() ? $items->firstWhere('id', (int) old('item_id')) : null;
+        $initial = $reopen
+            ? ['action' => route('school.fees.items.update', $reopen), 'values' => ['name' => old('name'), 'is_optional' => (bool) old('is_optional'), 'is_active' => (bool) old('is_active'), 'amounts' => (object) old('amounts', [])]]
+            : ['values' => ['name' => '', 'is_optional' => false, 'is_active' => true, 'amounts' => (object) []]];
+    @endphp
+    <div x-data="editPanel('item', @js($initial))">
+        <x-drawer name="item" title="Edit fee item" title-expression="values.name || 'Edit fee item'" :description="'Name, type and what each class pays for '.($term ? $term->name.' '.$term->academicSession->name : 'this term').'. Invoices already issued keep their amounts.'" :show="$reopen !== null" width="sm:max-w-lg">
+            <form method="POST" :action="action" class="flex flex-col gap-5" id="edit-item-form" x-data="{ every: '' }">
                 @csrf
                 @method('PATCH')
+                <input type="hidden" name="term_id" value="{{ $term?->id }}">
+                <input type="hidden" name="item_id" :value="action.split('/').pop()">
                 <div class="flex flex-col gap-1.5">
                     <label for="edit-item-name" class="text-sm font-semibold">Name</label>
-                    <input id="edit-item-name" name="name" class="field" x-model="values.name" required>
+                    <input id="edit-item-name" name="name" class="field" x-model="values.name" required maxlength="60">
+                    @error('name', 'editItem')<p class="m-0 text-[13px] font-medium text-danger">{{ $message }}</p>@enderror
                 </div>
-                <label class="flex items-center gap-3 text-[15px]">
-                    <input type="hidden" name="is_optional" value="0">
-                    <input type="checkbox" name="is_optional" value="1" class="size-4 accent-brand-600" x-model="values.is_optional">
-                    Optional
+
+                <fieldset class="m-0 flex flex-col gap-2 border-0 p-0">
+                    <legend class="mb-1.5 text-sm font-semibold">Who pays it</legend>
+                    <input type="hidden" name="is_optional" :value="values.is_optional ? 1 : 0">
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" class="rounded-xl border px-3 py-2.5 text-left text-sm transition" :class="! values.is_optional ? 'border-brand-600 bg-brand-50 font-semibold text-brand-700' : 'border-line bg-white text-muted'" x-on:click="values.is_optional = false">Compulsory<span class="block text-xs font-normal">On every invoice</span></button>
+                        <button type="button" class="rounded-xl border px-3 py-2.5 text-left text-sm transition" :class="values.is_optional ? 'border-brand-600 bg-brand-50 font-semibold text-brand-700' : 'border-line bg-white text-muted'" x-on:click="values.is_optional = true">Optional<span class="block text-xs font-normal">Added to a student by hand</span></button>
+                    </div>
+                </fieldset>
+
+                <label class="flex items-start gap-3 rounded-xl border border-line px-3 py-2.5 text-[15px]">
+                    <input type="hidden" name="is_active" value="0">
+                    <input type="checkbox" name="is_active" value="1" class="mt-1 size-4 accent-brand-600" x-model="values.is_active">
+                    <span>Active<span class="block text-sm text-muted">Untick to pause it: it stays on old invoices but is left off new ones.</span></span>
                 </label>
-                <x-button variant="brand" class="self-start">Save</x-button>
+
+                @if ($term)
+                    <div class="flex flex-col gap-2">
+                        <div class="flex items-end justify-between gap-3">
+                            <span class="text-sm font-semibold">Amount per class · {{ $term->name }}</span>
+                            <div class="flex items-center gap-1.5">
+                                <label for="edit-item-every" class="sr-only">Same amount for every class</label>
+                                <input id="edit-item-every" x-model="every" inputmode="decimal" placeholder="Same for all" class="field w-32 py-1.5 text-right font-mono text-sm">
+                                <button type="button" class="rounded-lg bg-brand-50 px-2.5 py-1.5 text-sm font-semibold text-brand-700 hover:bg-brand-100" x-on:click="Object.keys(values.amounts).forEach((level) => values.amounts[level] = every)">Apply</button>
+                            </div>
+                        </div>
+                        <div class="divide-y divide-line rounded-xl border border-line">
+                            @foreach ($levels as $level)
+                                <div class="flex items-center justify-between gap-3 px-3 py-1.5">
+                                    <label for="edit-item-amount-{{ $level->id }}" class="text-sm">{{ $level->name }}</label>
+                                    <div class="relative w-36">
+                                        <span class="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-muted" aria-hidden="true">₦</span>
+                                        <input id="edit-item-amount-{{ $level->id }}" name="amounts[{{ $level->id }}]" inputmode="decimal" placeholder="Not charged" class="field py-1.5 pl-7 text-right font-mono text-sm" x-model="values.amounts[{{ $level->id }}]">
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                        @error('amounts', 'editItem')<p class="m-0 text-[13px] font-medium text-danger">{{ $message }}</p>@enderror
+                        @if ($errors->editItem->has('amounts.*'))<p class="m-0 text-[13px] font-medium text-danger">{{ $errors->editItem->first('amounts.*') }}</p>@endif
+                        <p class="m-0 text-xs text-muted">Leave a class blank if it doesn’t pay this item.</p>
+                    </div>
+                @endif
             </form>
+            <x-slot:footer><x-button variant="brand" icon="check" form="edit-item-form">Save fee item</x-button></x-slot:footer>
         </x-drawer>
     </div>
 </x-layouts.app>

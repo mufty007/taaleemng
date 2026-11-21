@@ -16,6 +16,14 @@
         $currentSchool !== null => \App\Support\Navigation\SchoolNavigation::for($user),
         default => [],
     };
+
+    // The bell: the latest notices meant for this person, and how many they haven't opened.
+    $notices = $currentSchool !== null && ! $inPlatform
+        ? \App\Models\Announcement::query()->visibleTo($user)->with(['reads' => fn ($query) => $query->where('user_id', $user->id)])->noticeBoardOrder()->limit(6)->get()
+        : collect();
+    $unreadNotices = $currentSchool !== null && ! $inPlatform
+        ? \App\Models\Announcement::query()->visibleTo($user)->whereDoesntHave('reads', fn ($query) => $query->where('user_id', $user->id))->count()
+        : 0;
 @endphp
 
 <x-layouts.base :title="$title" data-app-shell>
@@ -65,7 +73,11 @@
                             title="{{ $currentSchool->name }}"
                             class="flex w-full items-center gap-3 rounded-xl border border-line px-3 py-2.5 text-left transition hover:border-brand lg:rail:justify-center lg:rail:border-transparent lg:rail:px-0"
                         >
-                            <span class="grid size-9 flex-none place-items-center rounded-lg bg-brand-50 text-sm font-bold text-brand-600">{{ $currentSchool->initials() }}</span>
+                            @if ($currentSchool->logoUrl())
+                                <img src="{{ $currentSchool->logoUrl() }}" alt="" class="size-9 flex-none rounded-lg object-contain">
+                            @else
+                                <span class="grid size-9 flex-none place-items-center rounded-lg bg-brand-50 text-sm font-bold text-brand-600">{{ $currentSchool->initials() }}</span>
+                            @endif
                             <span class="min-w-0 flex-1 lg:rail:hidden">
                                 <span class="block truncate text-sm font-semibold">{{ $currentSchool->name }}</span>
                                 <span class="block text-xs text-muted">{{ $currentSchool->status->label() }}{{ $currentSchool->state ? ' · '.$currentSchool->state : '' }}</span>
@@ -185,9 +197,45 @@
                 @endif
 
                 <div class="ml-auto flex items-center gap-1.5">
-                    <button type="button" class="relative grid size-10 place-items-center rounded-xl text-muted hover:bg-chip hover:text-ink" aria-label="Notifications">
-                        <x-lucide-bell class="size-5" aria-hidden="true" />
-                    </button>
+                    @if ($currentSchool && ! $inPlatform)
+                        <div x-data="{ open: false }" class="relative" @click.outside="open = false">
+                            <button type="button" @click="open = ! open" :aria-expanded="open.toString()" aria-haspopup="true" class="relative grid size-10 place-items-center rounded-xl text-muted hover:bg-chip hover:text-ink" aria-label="Notices{{ $unreadNotices ? ', '.$unreadNotices.' unread' : '' }}">
+                                <x-lucide-bell class="size-5" aria-hidden="true" />
+                                @if ($unreadNotices)
+                                    <span class="absolute top-1.5 right-1.5 grid min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] leading-4 font-bold text-white">{{ $unreadNotices > 9 ? '9+' : $unreadNotices }}</span>
+                                @endif
+                            </button>
+                            <div x-show="open" x-transition.origin.top.right x-cloak class="absolute right-0 z-20 mt-1.5 w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-line bg-white shadow-card">
+                                <div class="flex items-center justify-between border-b border-line px-4 py-3">
+                                    <span class="text-sm font-semibold">Notices</span>
+                                    @if ($unreadNotices)
+                                        <form method="POST" action="{{ route('school.announcements.read') }}">
+                                            @csrf
+                                            <button type="submit" class="text-xs font-semibold text-brand-600 hover:text-ink">Mark all as read</button>
+                                        </form>
+                                    @endif
+                                </div>
+                                <ul class="m-0 max-h-96 list-none overflow-y-auto p-1.5">
+                                    @forelse ($notices as $notice)
+                                        @php($unread = $notice->reads->isEmpty())
+                                        <li>
+                                            <a href="{{ route('school.announcements.show', $notice) }}" class="flex gap-3 rounded-lg px-2.5 py-2 hover:bg-chip">
+                                                <span @class(['mt-1.5 size-2 flex-none rounded-full', 'bg-brand-600' => $unread, 'bg-transparent' => ! $unread]) aria-hidden="true"></span>
+                                                <span class="min-w-0 flex-1">
+                                                    <span @class(['block truncate text-sm', 'font-semibold' => $unread])>{{ $notice->title }}</span>
+                                                    <span class="block truncate text-xs text-muted">{{ \Illuminate\Support\Str::limit($notice->body, 80) }}</span>
+                                                    <span class="block text-[11px] text-muted">{{ $notice->published_at->diffForHumans() }}</span>
+                                                </span>
+                                            </a>
+                                        </li>
+                                    @empty
+                                        <li class="px-2.5 py-4 text-center text-sm text-muted">No notices yet.</li>
+                                    @endforelse
+                                </ul>
+                                <a href="{{ route('school.announcements.index') }}" class="block border-t border-line px-4 py-2.5 text-center text-sm font-semibold text-brand-600 hover:bg-chip">Open the notice board</a>
+                            </div>
+                        </div>
+                    @endif
 
                     <div x-data="{ open: false }" class="relative" @click.outside="open = false">
                         <button type="button" @click="open = ! open" :aria-expanded="open.toString()" aria-haspopup="true" class="flex items-center gap-2.5 rounded-xl py-1.5 pr-2 pl-1.5 hover:bg-chip">

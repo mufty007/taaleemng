@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\School;
 
+use App\Actions\People\ChangeMemberRole;
 use App\Actions\People\SendInvitation;
 use App\Enums\MembershipStatus;
 use App\Enums\SchoolRole;
@@ -13,6 +14,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 /**
  * "Users & roles": everyone who can sign in to this school, and their roles here.
@@ -53,7 +55,29 @@ class MemberController extends Controller
             'roleCounts' => $roleCounts,
             'selectedRole' => $role,
             'search' => $search,
+            'staffRoleOptions' => collect(SchoolRole::cases())
+                ->filter(fn (SchoolRole $schoolRole) => $schoolRole->isStaff())
+                ->mapWithKeys(fn (SchoolRole $schoolRole) => [$schoolRole->value => $schoolRole->label()])
+                ->all(),
         ]);
+    }
+
+    /**
+     * Change which staff role a member has in this school.
+     */
+    public function updateRole(Request $request, CurrentSchool $currentSchool, User $user, ChangeMemberRole $changeMemberRole): RedirectResponse
+    {
+        $school = $currentSchool->getOrFail();
+        $school->users()->whereKey($user->id)->firstOrFail();
+
+        $data = $request->validate([
+            'role' => ['required', Rule::in(collect(SchoolRole::cases())->filter->isStaff()->map->value->all())],
+        ]);
+
+        $role = SchoolRole::from($data['role']);
+        $changeMemberRole->handle($user, $role, $request->user());
+
+        return back()->with('status', "{$user->name} is now {$role->label()}.");
     }
 
     /**

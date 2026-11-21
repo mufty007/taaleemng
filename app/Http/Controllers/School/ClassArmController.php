@@ -7,13 +7,19 @@ use App\Actions\Academic\ApplyNigerianDefaults;
 use App\Enums\StaffStatus;
 use App\Http\Controllers\Controller;
 use App\Models\AcademicSession;
+use App\Models\Assignment;
 use App\Models\ClassArm;
 use App\Models\ClassLevel;
+use App\Models\Quiz;
 use App\Models\Staff;
 use App\Models\Stream;
 use App\Models\Subject;
+use App\Models\Term;
+use App\Support\Attendance\AttendanceSummary;
+use App\Support\Attendance\ClassRegister;
 use App\Support\Classwork\ClassworkAccess;
 use App\Support\Tenancy\TenantRule;
+use App\Support\Timetable\Timetable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -78,13 +84,32 @@ class ClassArmController extends Controller
             ->sortBy(fn ($enrolment) => $enrolment->student->last_name.' '.$enrolment->student->first_name)
             ->values();
 
+        $canRegister = AttendanceController::canTake($user, $classArm);
+        $register = ClassRegister::for($classArm, ClassRegister::schoolDay(null));
+        $termSummary = $register->term ? AttendanceSummary::forTerm($register->term, $enrolments->pluck('id')->all()) : [];
+        $termDays = collect($termSummary)->sum('days');
+
+        // Classwork for this class: everything for academic staff, a teacher's own subjects otherwise.
+        $mySubjectIds = $classArm->classSubjects->filter(fn ($classSubject) => ClassworkAccess::canManage($user, $classSubject))->pluck('id');
+        $term = Term::current();
+
         return view('school.classes.show', [
             'classArm' => $classArm,
             'enrolments' => $enrolments,
             'session' => $session,
             'canManage' => $user->can('academics.manage'),
-            'canRegister' => AttendanceController::canTake($user, $classArm),
-            'myClassSubjectId' => $classArm->classSubjects->first(fn ($classSubject) => ClassworkAccess::canManage($user, $classSubject))?->id,
+            'canRegister' => $canRegister,
+            'periods' => Timetable::periods(),
+            'timetable' => Timetable::grid(Timetable::forClass($classArm)),
+            'register' => $register,
+            'attendanceRate' => $termDays > 0 ? (int) round(collect($termSummary)->sum(fn ($row) => $row['present'] + $row['late']) / $termDays * 100) : null,
+            'myClassSubjectId' => $mySubjectIds->first(),
+            'assignments' => Assignment::query()->with('classSubject.subject')->withCount('submissions')
+                ->whereIn('class_subject_id', $mySubjectIds)->where('term_id', $term->id ?? 0)
+                ->latest('due_at')->get(),
+            'quizzes' => Quiz::query()->with('classSubject.subject')->withCount(['attempts', 'questions'])
+                ->whereIn('class_subject_id', $mySubjectIds)->where('term_id', $term->id ?? 0)
+                ->latest()->get(),
             'teacherOptions' => $this->teacherOptions(),
             'subjectOptions' => Subject::query()
                 ->whereNotIn('id', $classArm->classSubjects->pluck('subject_id'))

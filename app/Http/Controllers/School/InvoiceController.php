@@ -13,6 +13,7 @@ use App\Models\ClassArm;
 use App\Models\ClassLevel;
 use App\Models\Enrolment;
 use App\Models\Invoice;
+use App\Models\InvoiceLine;
 use App\Models\Term;
 use App\Support\Money;
 use App\Support\Tenancy\TenantRule;
@@ -112,6 +113,23 @@ class InvoiceController extends Controller
         return to_route('school.invoices.index', ['term' => $term->id])->with('status', $message);
     }
 
+    /**
+     * The invoice as a printable, school-branded document, for the bursary or the family.
+     */
+    public function print(Request $request, Invoice $invoice): View
+    {
+        $user = $request->user();
+        $isFamily = $user->guardianRecord()?->students()->whereKey($invoice->student_id)->exists() || $user->studentRecord()?->is($invoice->student);
+        abort_unless($user->can('finance.view') || $isFamily, 403);
+
+        $invoice->load(['student.guardians', 'enrolment.classArm.level', 'term.academicSession', 'lines', 'allocations.payment']);
+
+        return view('school.invoices.print', [
+            'invoice' => $invoice,
+            'studentBalance' => AllocatePayments::balance($invoice->student),
+        ]);
+    }
+
     public function show(Invoice $invoice): View
     {
         $invoice->load(['student.guardians', 'enrolment.classArm.level', 'term.academicSession', 'lines', 'allocations.payment.recorder']);
@@ -126,6 +144,65 @@ class InvoiceController extends Controller
     /**
      * Add an extra charge or a discount to one invoice.
      */
+    /**
+     * Change the pay-by date and the note printed on the invoice.
+     */
+    public function update(Request $request, Invoice $invoice): RedirectResponse
+    {
+        $data = $request->validateWithBag('editInvoice', [
+            'due_on' => ['nullable', 'date'],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $invoice->update($data);
+
+        return back()->with('status', 'Invoice updated.');
+    }
+
+    public function updateLine(Request $request, Invoice $invoice, InvoiceLine $line, AllocatePayments $allocate): RedirectResponse
+    {
+        abort_unless($line->invoice_id === $invoice->id, 404);
+        abort_if($invoice->status === InvoiceStatus::Void, 409);
+
+        $data = $request->validateWithBag('editLine', [
+            'description' => ['required', 'string', 'max:120'],
+            'amount' => ['required', 'string', 'max:20', 'regex:/^-?[₦\s\d,]*(\.\d{1,2})?$/u'],
+        ], ['amount.regex' => 'Enter an amount like 15,000.']);
+
+        $amount = Money::toKobo(ltrim($data['amount'], '-')) * ($line->amount < 0 || str_starts_with(trim($data['amount']), '-') ? -1 : 1);
+        $before = $line->amount;
+
+        DB::transaction(function () use ($invoice, $line, $data, $amount): void {
+            $line->update(['description' => $data['description'], 'amount' => $amount]);
+            $invoice->update(['total' => (int) $invoice->lines()->sum('amount')]);
+        });
+
+        $allocate->rebalance($invoice->fresh());
+        activity('fees')->performedOn($invoice)->log("changed “{$line->description}” on {$invoice->invoice_no} from ".Money::format($before).' to '.Money::format($amount));
+
+        return back()->with('status', 'Line updated. The invoice total is now '.Money::format($invoice->fresh()->total).'.');
+    }
+
+    public function destroyLine(Invoice $invoice, InvoiceLine $line, AllocatePayments $allocate): RedirectResponse
+    {
+        abort_unless($line->invoice_id === $invoice->id, 404);
+        abort_if($invoice->status === InvoiceStatus::Void, 409);
+
+        if ($invoice->lines()->count() === 1) {
+            return back()->withErrors(['line' => 'An invoice needs at least one line. Cancel the invoice instead.']);
+        }
+
+        DB::transaction(function () use ($invoice, $line): void {
+            $line->delete();
+            $invoice->update(['total' => (int) $invoice->lines()->sum('amount')]);
+        });
+
+        $allocate->rebalance($invoice->fresh());
+        activity('fees')->performedOn($invoice)->log("removed “{$line->description}” (".Money::format($line->amount).") from {$invoice->invoice_no}");
+
+        return back()->with('status', "{$line->description} removed. The invoice total is now ".Money::format($invoice->fresh()->total).'.');
+    }
+
     public function addLine(Request $request, Invoice $invoice, AllocatePayments $allocate): RedirectResponse
     {
         abort_if($invoice->status === InvoiceStatus::Void, 409);

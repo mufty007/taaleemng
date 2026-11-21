@@ -26,19 +26,22 @@ final class SchoolNavigation
         $groups = [
             'Overview' => [
                 ['Dashboard', 'layout-dashboard', 'school.dashboard', null, 'school.dashboard'],
+                ['Notice board', 'megaphone', 'school.announcements.index', null, 'school.announcements.*'],
             ],
             'Academics' => [
                 ['Sessions & Terms', 'calendar-range', 'school.sessions.index', 'academics.manage', 'school.sessions.*'],
                 ['Classes', 'layers', 'school.classes.index', 'students.view', 'school.classes.*'],
                 ['Subjects', 'book-open', 'school.subjects.index', 'academics.manage', 'school.subjects.*'],
                 ['Promotion', 'trending-up', 'school.promotion.index', 'academics.manage', 'school.promotion.*'],
-                ['Time Table', 'calendar-days', null, 'timetable.manage', null],
+                ['Timetable', 'calendar-days', 'school.timetable.index', null, 'school.timetable.*'],
+                ['Exam timetable', 'calendar-clock', 'school.exams.index', null, 'school.exams.*'],
                 ['Attendance', 'clipboard-check', 'school.attendance.index', 'attendance.take', 'school.attendance.*'],
             ],
             'People' => [
                 ['Students', 'graduation-cap', 'school.students.index', 'students.view', 'school.students.*'],
                 ['Staff', 'briefcase', 'school.staff.index', 'staff.view', 'school.staff.*'],
                 ['Admissions', 'user-plus', 'school.admissions.index', 'admissions.manage', 'school.admissions.*'],
+                ['ID cards', 'id-card', 'school.id-cards.index', 'students.manage', 'school.id-cards.*'],
             ],
             'Results' => [
                 ['Score entry', 'file-pen-line', 'school.scores.index', 'scores.enter', 'school.scores.*'],
@@ -50,15 +53,16 @@ final class SchoolNavigation
                 ['Payments', 'banknote-arrow-down', 'school.payments.index', 'finance.view', 'school.payments.*'],
                 ['Debtors', 'hand-coins', 'school.debtors.index', 'finance.view', 'school.debtors.*'],
                 ['Fee setup', 'settings-2', 'school.fees.setup', 'fees.manage', 'school.fees.*'],
-                ['Cashflow', 'wallet', null, 'finance.view', null],
-                ['Payroll', 'banknote', null, 'payroll.manage', null],
-                ['Inventory', 'package', null, 'inventory.manage', null],
+                ['Expenses', 'trending-down', 'school.expenses.index', 'finance.view', 'school.expenses.*'],
+                ['Cashflow', 'wallet', 'school.cashflow.index', 'finance.view', 'school.cashflow.*'],
+                ['Payroll', 'banknote', 'school.payroll.index', 'payroll.manage', 'school.payroll.*'],
+                ['Inventory', 'package', 'school.inventory.index', 'inventory.manage', 'school.inventory.*'],
             ],
             'System' => [
                 ['School information', 'school', 'school.profile.edit', 'school.manage', 'school.profile.*'],
                 ['Users & roles', 'users-round', 'school.members.index', 'users.manage', 'school.members.*'],
                 ['Activity log', 'history', 'school.activity.index', 'activity.view', 'school.activity.*'],
-                ['Settings', 'settings', null, 'school.manage', null],
+                ['Settings', 'settings', 'school.settings.edit', 'school.manage', 'school.settings.*'],
             ],
         ];
 
@@ -76,13 +80,17 @@ final class SchoolNavigation
     private static function portalGroups(User $user): array
     {
         if ($user->guardianRecord()) {
-            return ['Family' => [['My children', 'users', 'school.portal', null, 'school.portal*']]];
+            return ['Family' => [
+                ['My children', 'users', 'school.portal', null, 'school.portal*'],
+                ['Notice board', 'megaphone', 'school.announcements.index', null, 'school.announcements.*'],
+            ]];
         }
 
         return [
             'My school' => [
                 ['My day', 'sun', 'school.portal', null, 'school.portal'],
                 ['My work', 'notebook-pen', 'school.portal.classwork', null, 'school.portal.classwork'],
+                ['Notice board', 'megaphone', 'school.announcements.index', null, 'school.announcements.*'],
             ],
         ];
     }

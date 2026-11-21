@@ -10,6 +10,9 @@ use App\Models\Quiz;
 use App\Models\QuizAttempt;
 use App\Models\Score;
 use App\Models\Subject;
+use App\Models\Term;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 beforeEach(function () {
     $this->school = schoolWithStructure(['slug' => 'greenfield']);
@@ -110,13 +113,72 @@ it('sets an assignment, takes a hand-in and marks it', function () {
     $this->actingAs($this->aisha->user)->post(route('school.portal.assignments.submit', [$this->school, $assignment]), ['body' => 'My working…'])->assertRedirect();
     $submission = inSchool($this->school, fn () => AssignmentSubmission::query()->sole());
 
-    $this->actingAs($this->teacher->user)->get(route('school.classwork.assignments.show', [$this->school, $assignment]))->assertOk()->assertSee('My working');
+    $this->actingAs($this->teacher->user)->get(route('school.classwork.assignments.show', [$this->school, $assignment]))->assertOk()->assertSee('To mark');
+    $this->actingAs($this->teacher->user)->get(route('school.classwork.submissions.show', [$this->school, $submission]))->assertOk()->assertSee('My working');
     $this->actingAs($this->teacher->user)->patch(route('school.classwork.submissions.mark', [$this->school, $submission]), ['score' => 8, 'feedback' => 'Good'])->assertSessionHasNoErrors();
     $this->actingAs($this->teacher->user)->patch(route('school.classwork.submissions.mark', [$this->school, $submission]), ['score' => 11])->assertSessionHasErrorsIn('mark'.$submission->id, 'score');
 
     $this->actingAs($this->aisha->user)->get(route('school.portal.assignments.show', [$this->school, $assignment]))->assertSee('8 / 10')->assertSee('Good');
     $this->actingAs($this->aisha->user)->post(route('school.portal.assignments.submit', [$this->school, $assignment]), ['body' => 'Changed'])
         ->assertSessionHas('status', 'Your teacher has marked this already, so it can’t be changed.');
+});
+
+it('takes an uploaded paper and shows it only to the teacher, the student and their parents', function () {
+    Storage::fake('local');
+
+    $this->actingAs($this->teacher->user)->post(route('school.classwork.assignments.store', $this->school), [
+        'class_subject_id' => $this->maths->id, 'title' => 'Essay', 'instructions' => 'Write 300 words.', 'due_at' => now()->addWeek()->format('Y-m-d H:i'), 'publish' => 1,
+        'files' => [UploadedFile::fake()->create('worksheet.pdf', 200, 'application/pdf')],
+    ])->assertSessionHasNoErrors();
+    $assignment = inSchool($this->school, fn () => Assignment::query()->sole());
+    expect($assignment->files)->toHaveCount(1);
+
+    $this->actingAs($this->aisha->user)->post(route('school.portal.assignments.submit', [$this->school, $assignment]), [])
+        ->assertSessionHasErrors('body');
+    $this->actingAs($this->aisha->user)->post(route('school.portal.assignments.submit', [$this->school, $assignment]), [
+        'files' => [UploadedFile::fake()->image('page-1.png'), UploadedFile::fake()->create('essay.docx', 50, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')],
+    ])->assertSessionHasNoErrors();
+    $submission = inSchool($this->school, fn () => AssignmentSubmission::query()->sole());
+    expect($submission->files)->toHaveCount(2)->and($submission->body)->toBeNull();
+    Storage::disk('local')->assertExists($submission->files[0]['path']);
+
+    $file = fn (int $index) => route('school.classwork.submissions.file', [$this->school, $submission, $index]);
+    $this->actingAs($this->teacher->user)->get($file(0))->assertOk()->assertHeader('content-disposition');
+    $this->actingAs($this->aisha->user)->get($file(1))->assertOk();
+    $this->actingAs($this->outsider->user)->get($file(0))->assertNotFound();
+    $this->actingAs(staffOf($this->school)->user)->get($file(0))->assertNotFound();
+    $this->actingAs($this->aisha->user)->get(route('school.classwork.assignments.file', [$this->school, $assignment, 0]))->assertOk();
+    $this->actingAs($this->outsider->user)->get(route('school.classwork.assignments.file', [$this->school, $assignment, 0]))->assertNotFound();
+
+    // Handing in again can drop a file and add another.
+    $this->actingAs($this->aisha->user)->post(route('school.portal.assignments.submit', [$this->school, $assignment]), [
+        'remove_files' => [1], 'files' => [UploadedFile::fake()->image('page-2.png')],
+    ])->assertSessionHasNoErrors();
+    expect(collect($submission->fresh()->files)->pluck('name')->all())->toBe(['page-1.png', 'page-2.png']);
+    Storage::disk('local')->assertMissing($submission->files[1]['path']);
+
+    $this->actingAs($this->teacher->user)->get(route('school.classwork.submissions.show', [$this->school, $submission]))->assertOk()->assertSee('page-2.png');
+});
+
+it('moves on to the next unmarked hand-in after saving a mark', function () {
+    $second = enrol($this->school, 'JSS 1', 'A', ['first_name' => 'Zainab', 'last_name' => 'Zubairu'])->student;
+    [$assignment, $first, $next] = inSchool($this->school, function () use ($second) {
+        $assignment = Assignment::query()->create([
+            'class_subject_id' => $this->maths->id, 'term_id' => Term::current()->id,
+            'title' => 'Exercise', 'instructions' => 'Go', 'due_at' => now()->addDay(), 'status' => ClassworkStatus::Published,
+        ]);
+
+        return [
+            $assignment,
+            AssignmentSubmission::query()->create(['assignment_id' => $assignment->id, 'student_id' => $this->aisha->id, 'body' => 'A', 'submitted_at' => now()]),
+            AssignmentSubmission::query()->create(['assignment_id' => $assignment->id, 'student_id' => $second->id, 'body' => 'B', 'submitted_at' => now()]),
+        ];
+    });
+
+    $this->actingAs($this->teacher->user)->patch(route('school.classwork.submissions.mark', [$this->school, $first]), ['score' => 5, 'next' => 1])
+        ->assertRedirect(route('school.classwork.submissions.show', [$this->school, $next]));
+    $this->actingAs($this->teacher->user)->patch(route('school.classwork.submissions.mark', [$this->school, $next]), ['score' => 7, 'next' => 1])
+        ->assertRedirect(route('school.classwork.assignments.show', [$this->school, $assignment]));
 });
 
 it('marks each question type', function (QuestionType $type, array $answer, mixed $response, bool $correct) {

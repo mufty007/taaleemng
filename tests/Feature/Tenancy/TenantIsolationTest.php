@@ -3,30 +3,45 @@
 use App\Actions\Platform\AddSchoolMember;
 use App\Enums\SchoolRole;
 use App\Models\AcademicSession;
+use App\Models\Announcement;
+use App\Models\AnnouncementRead;
 use App\Models\Applicant;
 use App\Models\AssessmentComponent;
+use App\Models\Assignment;
+use App\Models\AssignmentSubmission;
 use App\Models\AttendanceRecord;
 use App\Models\ClassLevel;
+use App\Models\ClassSubject;
 use App\Models\CommentTemplate;
+use App\Models\ExamPaper;
+use App\Models\Expense;
 use App\Models\FeeItem;
 use App\Models\FeeStructure;
 use App\Models\GradingScheme;
 use App\Models\Guardian;
+use App\Models\InventoryItem;
 use App\Models\Invoice;
 use App\Models\NumberSequence;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
+use App\Models\PayrollLine;
+use App\Models\PayrollRun;
+use App\Models\Period;
+use App\Models\Quiz;
+use App\Models\QuizAttempt;
 use App\Models\ReportTrait;
 use App\Models\ResultPublication;
 use App\Models\School;
 use App\Models\SchoolSetting;
 use App\Models\Score;
 use App\Models\Staff;
+use App\Models\StockMovement;
 use App\Models\Stream;
 use App\Models\Student;
 use App\Models\StudentImport;
 use App\Models\Subject;
 use App\Models\TermReport;
+use App\Models\TimetableEntry;
 use App\Models\User;
 use App\Support\Tenancy\CurrentSchool;
 use App\Support\Tenancy\MissingSchoolContextException;
@@ -124,6 +139,63 @@ dataset('tenant models', [
         'class_arm_id' => ClassLevel::query()->create(['name' => 'JSS 1', 'short_name' => 'JSS 1', 'section' => 'junior'])->arms()->create(['name' => 'A'])->id,
         'published_at' => now(),
     ])],
+    'assignments' => [fn () => isolationAssignment()],
+    'assignment submissions' => [function () {
+        $invoice = isolationInvoice();
+
+        return AssignmentSubmission::query()->create([
+            'assignment_id' => isolationAssignment($invoice)->id, 'student_id' => $invoice->student_id, 'body' => 'Done', 'submitted_at' => now(),
+        ]);
+    }],
+    'quizzes' => [fn () => isolationQuiz()],
+    'quiz questions' => [fn () => isolationQuiz()->questions()->create(['type' => 'true_false', 'prompt' => 'Lagos is a state.', 'answer' => ['true'], 'marks' => 1])],
+    'quiz attempts' => [function () {
+        $invoice = isolationInvoice();
+
+        return QuizAttempt::query()->create(['quiz_id' => isolationQuiz($invoice)->id, 'student_id' => $invoice->student_id, 'started_at' => now()]);
+    }],
+    'periods' => [fn () => Period::query()->create(['name' => 'Period 1', 'starts_at' => '07:50', 'ends_at' => '08:30', 'kind' => 'lesson'])],
+    'announcements' => [fn () => Announcement::query()->create(['title' => 'PTA', 'body' => 'Saturday', 'audience' => 'everyone', 'published_at' => now()])],
+    'announcement reads' => [fn () => AnnouncementRead::query()->create([
+        'announcement_id' => Announcement::query()->create(['title' => 'PTA', 'body' => 'Saturday', 'audience' => 'everyone', 'published_at' => now()])->id,
+        'user_id' => User::factory()->create()->id, 'read_at' => now(),
+    ])],
+    'expenses' => [fn () => Expense::query()->create(['category' => 'power', 'description' => 'Diesel', 'amount' => 190_000_00, 'spent_on' => '2026-09-20', 'method' => 'cash'])],
+    'payroll runs' => [fn () => PayrollRun::query()->create(['year' => 2026, 'month' => 10, 'status' => 'prepared', 'gross_total' => 100_000_00, 'deductions_total' => 10_000_00, 'net_total' => 90_000_00, 'headcount' => 1])],
+    'payroll lines' => [function () {
+        $run = PayrollRun::query()->create(['year' => 2026, 'month' => 9, 'status' => 'prepared', 'gross_total' => 100_000_00, 'deductions_total' => 0, 'net_total' => 100_000_00, 'headcount' => 1]);
+        $staff = Staff::query()->create(['staff_no' => 'ISO/STF/1', 'first_name' => 'Iso', 'last_name' => 'Staff', 'gender' => 'female', 'designation' => 'Teacher', 'employment_type' => 'full_time', 'status' => 'active']);
+
+        return PayrollLine::query()->create([
+            'payroll_run_id' => $run->id, 'staff_id' => $staff->id, 'staff_name' => 'Iso Staff', 'staff_no' => 'ISO/STF/1',
+            'designation' => 'Teacher', 'basic_salary' => 100_000_00, 'allowances' => 0, 'deductions' => 0, 'net_pay' => 100_000_00,
+        ]);
+    }],
+    'inventory items' => [fn () => InventoryItem::query()->create(['name' => 'Shirt', 'category' => 'uniforms', 'unit' => 'piece', 'quantity_on_hand' => 10])],
+    'stock movements' => [function () {
+        $item = InventoryItem::query()->create(['name' => 'Book', 'category' => 'textbooks', 'unit' => 'piece', 'quantity_on_hand' => 5]);
+
+        return StockMovement::query()->create([
+            'inventory_item_id' => $item->id, 'type' => 'receive', 'quantity' => 5, 'balance_after' => 5, 'moved_at' => now(),
+        ]);
+    }],
+    'exam papers' => [function () {
+        $invoice = isolationInvoice();
+
+        return ExamPaper::query()->create([
+            'term_id' => $invoice->term_id, 'class_level_id' => $invoice->enrolment->classArm->class_level_id,
+            'subject_id' => Subject::query()->create(['name' => 'Mathematics', 'code' => 'MTH', 'category' => 'core'])->id,
+            'starts_at' => '2026-12-07 09:00', 'duration_minutes' => 120,
+        ]);
+    }],
+    'timetable entries' => [function () {
+        $classSubject = isolationClassSubject();
+
+        return TimetableEntry::query()->create([
+            'class_arm_id' => $classSubject->class_arm_id, 'class_subject_id' => $classSubject->id, 'day' => 1,
+            'period_id' => Period::query()->create(['name' => 'Period 1', 'starts_at' => '07:50', 'ends_at' => '08:30', 'kind' => 'lesson'])->id,
+        ]);
+    }],
 ]);
 
 beforeEach(function () {
@@ -289,6 +361,28 @@ function isolationInvoice(): Invoice
         'total' => 150_000_00,
         'status' => 'unpaid',
         'issued_at' => now(),
+    ]);
+}
+
+function isolationClassSubject(): ClassSubject
+{
+    return ClassLevel::query()->create(['name' => 'JSS 2', 'short_name' => 'JSS 2', 'section' => 'junior'])->arms()->create(['name' => 'A'])
+        ->classSubjects()->create(['subject_id' => Subject::query()->create(['name' => 'Mathematics', 'code' => 'MTH'.fake()->unique()->numerify('##'), 'category' => 'core'])->id]);
+}
+
+function isolationAssignment(?Invoice $invoice = null): Assignment
+{
+    return Assignment::query()->create([
+        'class_subject_id' => isolationClassSubject()->id, 'term_id' => ($invoice ?? isolationInvoice())->term_id,
+        'title' => 'Exercise', 'instructions' => 'Go', 'due_at' => now()->addDay(), 'status' => 'published',
+    ]);
+}
+
+function isolationQuiz(?Invoice $invoice = null): Quiz
+{
+    return Quiz::query()->create([
+        'class_subject_id' => isolationClassSubject()->id, 'term_id' => ($invoice ?? isolationInvoice())->term_id,
+        'title' => 'Quiz', 'kind' => 'quiz', 'status' => 'draft',
     ]);
 }
 

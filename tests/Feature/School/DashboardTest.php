@@ -1,7 +1,12 @@
 <?php
 
+use App\Enums\ClassworkStatus;
 use App\Enums\SchoolRole;
+use App\Models\Assignment;
+use App\Models\AssignmentSubmission;
 use App\Models\ClassArm;
+use App\Models\Term;
+use Illuminate\Support\Carbon;
 use Spatie\Activitylog\Models\Activity;
 
 it('greets the user and shows the school admin a setup checklist', function () {
@@ -62,4 +67,45 @@ it('records sign-ins in the activity log with the client IP', function () {
 
     expect($activity->causer_id)->toBe($user->id)
         ->and($activity->ip_address)->toBe('127.0.0.1');
+});
+
+it('puts what needs doing first for each role', function () {
+    $school = schoolWithStructure();
+    $teacher = staffOf($school);
+    $aisha = enrol($school, 'JSS 1', 'A', ['first_name' => 'Aisha'])->student;
+
+    $assignment = inSchool($school, function () use ($teacher, $aisha) {
+        $arm = ClassArm::query()->whereHas('level', fn ($query) => $query->where('name', 'JSS 1'))->where('name', 'A')->sole();
+        $arm->update(['form_teacher_id' => $teacher->id]);
+        $maths = $arm->classSubjects()->first();
+        $maths->update(['teacher_id' => $teacher->id]);
+        $assignment = Assignment::query()->create([
+            'class_subject_id' => $maths->id, 'term_id' => Term::current()->id, 'title' => 'Long division',
+            'instructions' => 'Go', 'due_at' => now()->addDay(), 'status' => ClassworkStatus::Published,
+        ]);
+        AssignmentSubmission::query()->create(['assignment_id' => $assignment->id, 'student_id' => $aisha->id, 'body' => 'Done', 'submitted_at' => now()]);
+
+        return $assignment;
+    });
+
+    $this->travelTo(inSchool($school, fn () => Term::current()->starts_on->copy()->next(Carbon::TUESDAY)->setTime(10, 0)));
+
+    $this->actingAs($teacher->user)->get(route('school.dashboard', $school))
+        ->assertOk()
+        ->assertSee('Needs your attention')
+        ->assertSee('Take today’s register for JSS 1A')
+        ->assertSee('1 hand-in to mark')
+        ->assertSee('Long division');
+
+    $this->actingAs(memberOf($school))->get(route('school.dashboard', $school))
+        ->assertOk()
+        ->assertSee('haven’t taken today’s register')
+        ->assertSee('Today’s registers')
+        ->assertSee('School fees this term');
+
+    $this->actingAs(memberOf($school, SchoolRole::Bursar))->get(route('school.dashboard', $school))
+        ->assertOk()
+        ->assertSee('Collected today')
+        ->assertSee('Quick actions')
+        ->assertDontSee('Today’s registers');
 });

@@ -1,15 +1,17 @@
-@props(['label', 'value', 'hint' => null, 'icon' => null, 'tone' => 'brand'])
+@props(['label', 'value', 'hint' => null, 'icon' => null, 'tone' => 'brand', 'href' => null])
 
 @php
     $toneClasses = match ($tone) {
         'naija' => 'bg-naija-50 text-naija-700',
         'gold' => 'bg-gold-50 text-gold',
         'sky' => 'bg-sky-50 text-sky',
+        'danger' => 'bg-danger-50 text-danger',
         default => 'bg-brand-50 text-brand-600',
     };
+    $tag = $href ? 'a' : 'div';
 @endphp
 
-<div {{ $attributes->class(['flex flex-col gap-3 rounded-2xl border border-line bg-white p-5']) }}>
+<{{ $tag }} @if ($href) href="{{ $href }}" @endif {{ $attributes->class(['flex flex-col gap-3 rounded-2xl border border-line bg-white p-5', 'transition hover:border-brand hover:shadow-card' => $href]) }}>
     <div class="flex items-center justify-between gap-3">
         <span class="text-sm font-medium text-muted">{{ $label }}</span>
         @if ($icon)
@@ -22,4 +24,4 @@
     @if ($hint)
         <div class="text-[13px] text-muted">{{ $hint }}</div>
     @endif
-</div>
+</{{ $tag }}>

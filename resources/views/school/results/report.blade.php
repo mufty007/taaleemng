@@ -6,6 +6,11 @@
     $arm = $results->arm;
     $school = $currentSchool;
     $priorTerms = $sessionTerms->reject(fn ($sessionTerm) => $sessionTerm->is($term));
+    // Until every score is in (usually the exam), the card shows results so far: marks out of what has been set, no grades or positions.
+    $soFar = ! $row['complete'];
+    $session = $soFar ? null : $session;
+    $missing = $results->missingComponents();
+    $trim = fn (float $value): string => rtrim(rtrim(number_format($value, 1), '0'), '.');
     $cumulativeFor = function (int $classSubjectId) use ($session): ?float {
         $totals = $session['subjects'][$classSubjectId] ?? [];
 
@@ -13,38 +18,11 @@
     };
 @endphp
 
-<x-layouts.base :title="$student->fullName().' report card'">
-    <x-slot:head>
-        <style>
-            @media print {
-                @page { size: A4; margin: 12mm; }
-                .no-print { display: none !important; }
-                body { background: white !important; }
-                .sheet { box-shadow: none !important; border: 0 !important; margin: 0 !important; padding: 0 !important; }
-            }
-        </style>
-    </x-slot:head>
-
-    <div class="no-print sticky top-0 z-10 border-b border-line bg-white/90 backdrop-blur">
-        <div class="mx-auto flex max-w-[860px] items-center justify-between gap-3 px-4 py-3">
-            <a href="{{ url()->previous() }}" class="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-ink"><x-lucide-arrow-left class="size-4" aria-hidden="true" /> Back</a>
-            <x-button icon="printer" type="button" onclick="window.print()">Print or save as PDF</x-button>
-        </div>
-    </div>
-
-    <main class="sheet mx-auto my-6 max-w-[860px] rounded-2xl border border-line bg-white p-8 shadow-card">
-        <header class="flex items-start justify-between gap-6 border-b-2 border-ink pb-5">
-            <div>
-                <h1 class="m-0 text-2xl font-bold tracking-[-0.02em] uppercase">{{ $school->name }}</h1>
-                @if ($school->motto)<p class="m-0 text-sm text-muted italic">“{{ $school->motto }}”</p>@endif
-                <p class="m-0 mt-1 text-sm text-muted">{{ $school->address }}{{ $school->phone ? ' · '.$school->phone : '' }}</p>
-            </div>
-            <div class="text-right">
-                <div class="text-xs font-semibold tracking-[0.14em] text-brand-600 uppercase">Report card</div>
-                <div class="text-lg font-bold">{{ $term->name }}</div>
-                <div class="text-sm text-muted">{{ $term->academicSession->name }} session</div>
-            </div>
-        </header>
+<x-layouts.print :title="$student->fullName().($soFar ? ' results so far' : ' report card')" :document="$soFar ? 'Results so far' : 'Report card'" :school="$school">
+    <x-slot:meta>
+        <div class="mt-1.5 text-lg font-bold">{{ $term->name }}</div>
+        <div class="text-sm text-muted">{{ $term->academicSession->name }} session</div>
+    </x-slot:meta>
 
         <section class="grid grid-cols-2 gap-x-8 gap-y-1.5 border-b border-line py-4 text-sm sm:grid-cols-4">
             <div><span class="text-muted">Name</span><div class="font-semibold">{{ $student->registerName() }}</div></div>
@@ -53,9 +31,59 @@
             <div><span class="text-muted">Gender</span><div class="font-semibold">{{ $student->gender->label() }}</div></div>
         </section>
 
+        @if ($soFar)
+            <div class="mt-4 rounded-xl border border-gold-200 bg-gold-50 px-4 py-3 text-sm text-gold">
+                <span class="font-semibold">These are results so far, not the final report.</span>
+                {{ $missing->isNotEmpty() ? $missing->pluck('name')->join(', ', ' and ').' scores are not in yet' : 'Some scores are not in yet' }}, so each subject shows the marks earned out of the marks set so far. Grades and positions come with the final report card.
+            </div>
+
+            <table class="mt-4 w-full border-collapse text-left text-sm">
+                <thead>
+                    <tr class="bg-brand-600 text-xs font-semibold text-white uppercase">
+                        <th scope="col" class="px-3 py-2">Subject</th>
+                        @foreach ($results->components as $component)
+                            <th scope="col" class="px-2 py-2 text-center">{{ $component->short_name }} ({{ $component->max_score }})</th>
+                        @endforeach
+                        <th scope="col" class="px-2 py-2 text-center">So far</th>
+                        <th scope="col" class="px-2 py-2 text-center">%</th>
+                        <th scope="col" class="px-2 py-2 text-center">Class avg. %</th>
+                        <th scope="col" class="px-3 py-2">Remark</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach ($results->classSubjects as $classSubject)
+                        @continue(! isset($row['subjects'][$classSubject->id]))
+                        @php($cell = $row['subjects'][$classSubject->id])
+                        <tr class="border-b border-line">
+                            <th scope="row" class="px-3 py-1.5 text-left font-medium">{{ $classSubject->subject->name }}</th>
+                            @foreach ($results->components as $component)
+                                <td class="px-2 py-1.5 text-center">{{ isset($cell['scores'][$component->id]) ? $trim($cell['scores'][$component->id]) : '—' }}</td>
+                            @endforeach
+                            <td class="px-2 py-1.5 text-center font-bold whitespace-nowrap">{{ $trim($cell['total']) }} / {{ $cell['max'] }}</td>
+                            <td class="px-2 py-1.5 text-center font-semibold">{{ $trim($cell['percent']) }}%</td>
+                            <td class="px-2 py-1.5 text-center text-muted">{{ isset($results->statistics[$classSubject->id]) ? $trim($results->statistics[$classSubject->id]['percent']).'%' : '—' }}</td>
+                            <td class="px-3 py-1.5 whitespace-nowrap">{{ $cell['complete'] ? $cell['grade'].' · '.$cell['remark'] : 'In progress' }}</td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+
+            <section class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                @foreach ([
+                    'Average so far' => $row['percent'] !== null ? $trim($row['percent']).'%' : '—',
+                    'Subjects with scores' => $row['subject_count'],
+                    'Still to come' => $missing->isNotEmpty() ? $missing->pluck('name')->join(', ') : 'Some scores',
+                ] as $label => $value)
+                    <div class="rounded-xl border border-brand-200 bg-brand-50 px-4 py-3">
+                        <div class="text-xs text-brand-700">{{ $label }}</div>
+                        <div class="text-lg font-bold">{{ $value }}</div>
+                    </div>
+                @endforeach
+            </section>
+        @else
         <table @class(['mt-4 w-full border-collapse text-left', $session ? 'text-[13px]' : 'text-sm'])>
             <thead>
-                <tr class="bg-ink text-xs font-semibold text-white uppercase">
+                <tr class="bg-brand-600 text-xs font-semibold text-white uppercase">
                     <th scope="col" class="px-3 py-2">Subject</th>
                     @foreach ($results->components as $component)
                         <th scope="col" class="px-2 py-2 text-center">{{ $component->short_name }} ({{ $component->max_score }})</th>
@@ -68,7 +96,9 @@
                         <th scope="col" class="px-2 py-2 text-center">Cum. avg.</th>
                     @endif
                     <th scope="col" class="px-2 py-2 text-center">Grade</th>
-                    <th scope="col" class="px-2 py-2 text-center">Position</th>
+                    @if ($showPositions)
+                        <th scope="col" class="px-2 py-2 text-center">Position</th>
+                    @endif
                     <th scope="col" class="px-2 py-2 text-center">Class avg.</th>
                     <th scope="col" class="px-3 py-2">Remark</th>
                 </tr>
@@ -90,7 +120,9 @@
                             <td class="px-2 py-1.5 text-center font-semibold">{{ $cumulativeFor($classSubject->id) ?? '—' }}</td>
                         @endif
                         <td class="px-2 py-1.5 text-center font-semibold">{{ $cell['grade'] }}</td>
-                        <td class="px-2 py-1.5 text-center">{{ isset($cell['position']) ? ResultCalculator::ordinal($cell['position']) : '—' }}</td>
+                        @if ($showPositions)
+                            <td class="px-2 py-1.5 text-center">{{ isset($cell['position']) ? ResultCalculator::ordinal($cell['position']) : '—' }}</td>
+                        @endif
                         <td class="px-2 py-1.5 text-center text-muted">{{ $results->statistics[$classSubject->id]['average'] ?? '—' }}</td>
                         <td class="px-3 py-1.5 whitespace-nowrap">{{ $cell['remark'] }}</td>
                     </tr>
@@ -102,17 +134,18 @@
             @foreach (array_filter([
                 'Total score' => $row['total'],
                 'Average' => $row['average'] ?? '—',
-                'Position' => isset($row['position']) ? ResultCalculator::ordinal($row['position']).' of '.$results->classSize : '—',
+                'Position' => $showPositions && isset($row['position']) ? ResultCalculator::ordinal($row['position']).' of '.$results->classSize : null,
                 'Subjects offered' => $session ? null : $row['subject_count'],
                 'Session average' => $session ? ($session['average'] ?? '—') : null,
-                'Session position' => $session ? (isset($session['position']) ? ResultCalculator::ordinal($session['position']).' of '.$results->classSize : '—') : null,
+                'Session position' => $showPositions && $session && isset($session['position']) ? ResultCalculator::ordinal($session['position']).' of '.$results->classSize : null,
             ], fn ($value) => $value !== null) as $label => $value)
-                <div class="rounded-xl border border-line px-4 py-3">
-                    <div class="text-xs text-muted">{{ $label }}</div>
+                <div class="rounded-xl border border-brand-200 bg-brand-50 px-4 py-3">
+                    <div class="text-xs text-brand-700">{{ $label }}</div>
                     <div class="text-lg font-bold">{{ $value }}</div>
                 </div>
             @endforeach
         </section>
+        @endif
 
         <section class="mt-5 grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
             <div class="rounded-xl border border-line p-4">
@@ -158,7 +191,7 @@
         </section>
 
         @if ($session && $report?->promotion_decision)
-            <section class="mt-4 rounded-xl border-2 border-ink px-4 py-3 text-center text-[15px] font-bold tracking-wide uppercase">
+            <section class="mt-4 rounded-xl border-2 border-brand-600 px-4 py-3 text-brand-700 text-center text-[15px] font-bold tracking-wide uppercase">
                 @if ($report->promotion_decision === PromotionDecision::Graduated)
                     Graduated
                 @elseif ($report->promotion_decision->movesUp())
@@ -169,9 +202,8 @@
             </section>
         @endif
 
-        <footer class="mt-5 flex flex-wrap justify-between gap-2 border-t border-line pt-3 text-xs text-muted">
-            <span>Grading: {{ collect($results->scheme->bands)->map(fn ($band) => $band['grade'].' '.$band['min'].'+')->join(' · ') }}</span>
-            @if ($term->next_term_begins_on)<span>Next term begins {{ $term->next_term_begins_on->format('l j F Y') }}</span>@endif
-        </footer>
-    </main>
-</x-layouts.base>
+        <x-slot:footer>
+            Grading: {{ collect($results->scheme->bands)->map(fn ($band) => $band['grade'].' '.$band['min'].'+')->join(' · ') }}
+            @if ($term->next_term_begins_on) · Next term begins {{ $term->next_term_begins_on->format('l j F Y') }}@endif
+        </x-slot:footer>
+</x-layouts.print>

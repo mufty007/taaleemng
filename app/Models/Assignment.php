@@ -16,8 +16,11 @@ use Illuminate\Support\Carbon;
  *
  * @property ClassworkStatus $status
  * @property Carbon $due_at
+ * @property list<array{path: string, name: string, size: int, mime: string}>|null $files
+ * @property-read int $submissions_count
+ * @property-read int $unmarked_count
  */
-#[Fillable(['class_subject_id', 'term_id', 'created_by', 'title', 'instructions', 'due_at', 'max_score', 'status'])]
+#[Fillable(['class_subject_id', 'term_id', 'created_by', 'title', 'instructions', 'files', 'due_at', 'max_score', 'status'])]
 class Assignment extends Model
 {
     use BelongsToSchool, HasUlids;
@@ -44,6 +47,7 @@ class Assignment extends Model
             'status' => ClassworkStatus::class,
             'due_at' => 'datetime',
             'max_score' => 'integer',
+            'files' => 'array',
         ];
     }
 

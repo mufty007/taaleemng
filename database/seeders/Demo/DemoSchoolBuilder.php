@@ -4,36 +4,50 @@ namespace Database\Seeders\Demo;
 
 use App\Actions\Academic\AddClassArm;
 use App\Actions\Academic\ApplyNigerianDefaults;
+use App\Actions\Academic\GenerateExamTimetable;
 use App\Actions\Academic\StartSession;
 use App\Actions\Admissions\SubmitApplication;
 use App\Actions\Fees\GenerateInvoices;
 use App\Actions\Fees\RecordPayment;
 use App\Actions\Fees\StartOnlinePayment;
+use App\Actions\Inventory\RecordStockMovement;
+use App\Actions\Payroll\PreparePayroll;
 use App\Actions\People\AddStaffMember;
 use App\Actions\People\EnrolStudent;
+use App\Actions\Timetable\AutofillTimetable;
 use App\Enums\ApplicantStatus;
 use App\Enums\ClassSection;
 use App\Enums\CommentAudience;
 use App\Enums\EnrolmentStatus;
+use App\Enums\InventoryCategory;
 use App\Enums\PaymentMethod;
+use App\Enums\PayrollRunStatus;
 use App\Enums\SchoolRole;
+use App\Enums\StockMovementType;
 use App\Enums\TermStatus;
 use App\Models\AcademicSession;
+use App\Models\Announcement;
 use App\Models\AssessmentComponent;
 use App\Models\ClassArm;
 use App\Models\ClassLevel;
 use App\Models\ClassSubject;
 use App\Models\Enrolment;
+use App\Models\ExamPaper;
 use App\Models\FeeItem;
 use App\Models\FeeStructure;
 use App\Models\Guardian;
+use App\Models\InventoryItem;
 use App\Models\Invoice;
+use App\Models\PayrollRun;
+use App\Models\Period;
 use App\Models\ReportTrait;
 use App\Models\ResultPublication;
 use App\Models\School;
 use App\Models\Staff;
 use App\Models\Stream;
+use App\Models\Student;
 use App\Models\Term;
+use App\Support\Finance\CashflowPeriod;
 use App\Support\Results\CommentBank;
 use App\Support\Results\PromotionRules;
 use App\Support\Results\ResultCalculator;
@@ -41,6 +55,7 @@ use App\Support\Tenancy\CurrentSchool;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
@@ -104,13 +119,14 @@ final class DemoSchoolBuilder
     }
 
     /**
-     * @param  array{title: string, first: string, last: string, gender: string, designation: string, department?: string, email?: string, phone?: string, qualification?: string, joined?: string}  $person
+     * @param  array{title: string, first: string, last: string, gender: string, designation: string, department?: string, email?: string, phone?: string, qualification?: string, joined?: string, basic_salary?: int, allowances?: int, deductions?: int}  $person
      */
     public function staff(string $key, array $person, SchoolRole $role): Staff
     {
         $email = $person['email'] ?? Str::lower(Str::ascii($person['first'].'.'.$person['last'])).'@'.$this->emailDomain;
         $phone = $person['phone'] ?? $this->people->phone();
         $this->people->reservePhone($phone);
+        $pay = $this->salaryFor($role, $person);
 
         ['staff' => $staff] = app(AddStaffMember::class)->handle([
             'title' => $person['title'],
@@ -124,9 +140,38 @@ final class DemoSchoolBuilder
             'employment_type' => 'full_time',
             'date_employed' => $person['joined'] ?? Carbon::create($this->people->between(2012, 2025), $this->people->between(1, 9), 1)->toDateString(),
             'qualification' => $person['qualification'] ?? $this->people->pick(['B.Ed', 'B.Sc (Ed)', 'NCE', 'M.Ed', 'B.A (Ed)', 'PGDE']),
+            'basic_salary' => $pay['basic'],
+            'allowances' => $pay['allowances'],
+            'deductions' => $pay['deductions'],
+            'bank_name' => $this->people->pick(['Access Bank', 'GTBank', 'Zenith Bank', 'UBA', 'First Bank', 'Stanbic IBTC']),
+            'bank_account_name' => trim($person['title'].' '.$person['first'].' '.$person['last']),
+            'bank_account_number' => (string) $this->people->between(1000000000, 1999999999),
         ], $role, self::PASSWORD);
 
         return $this->staffByKey[$key] = $staff;
+    }
+
+    /**
+     * Monthly pay in kobo, by role. Overrides in $person win.
+     *
+     * @param  array{basic_salary?: int, allowances?: int, deductions?: int}  $person
+     * @return array{basic: int, allowances: int, deductions: int}
+     */
+    private function salaryFor(SchoolRole $role, array $person): array
+    {
+        [$basic, $allowances] = match ($role) {
+            SchoolRole::SchoolAdmin => [450_000_00, 50_000_00],
+            SchoolRole::Principal => [380_000_00, 40_000_00],
+            SchoolRole::Bursar => [200_000_00, 25_000_00],
+            SchoolRole::StoreKeeper => [120_000_00, 10_000_00],
+            default => [$this->people->between(140, 190) * 1_000_00, $this->people->between(10, 30) * 1_000_00],
+        };
+
+        $basic = $person['basic_salary'] ?? $basic;
+        $allowances = $person['allowances'] ?? $allowances;
+        $deductions = $person['deductions'] ?? (int) round(($basic + $allowances) * 0.12);
+
+        return compact('basic', 'allowances', 'deductions');
     }
 
     public function staffMember(string $key): Staff
@@ -491,7 +536,12 @@ final class DemoSchoolBuilder
             $instalments[] = $amount - array_sum($instalments);
 
             foreach ($instalments as $index => $instalment) {
-                $paidAt = $invoice->term->starts_on->copy()->subDays(5)->addDays(mt_rand(0, 20) + $index * 30)->setTime(mt_rand(8, 16), mt_rand(0, 59));
+                // Most families pay around resumption; part payments and second instalments trickle in through the term.
+                $elapsed = max(1, (int) $invoice->term->starts_on->diffInDays(min(now(), $invoice->term->ends_on)));
+                $paidAt = ($index > 0 || $share < 1.0)
+                    ? $invoice->term->starts_on->copy()->addDays(mt_rand(min(14, $elapsed), $elapsed))
+                    : $invoice->term->starts_on->copy()->subDays(5)->addDays(mt_rand(0, 20));
+                $paidAt->setTime(mt_rand(8, 16), mt_rand(0, 59));
 
                 if ($paidAt->isFuture()) {
                     $paidAt = now()->subDays(mt_rand(1, 6));
@@ -521,7 +571,7 @@ final class DemoSchoolBuilder
         $term = Term::current();
         $days = [];
 
-        for ($day = $term->starts_on->copy(); $day->lt(today()); $day->addDay()) {
+        for ($day = $term->starts_on->copy(); $day->lte(today()); $day->addDay()) {
             $onBreak = $term->mid_term_starts_on && $day->between($term->mid_term_starts_on, $term->mid_term_ends_on ?? $term->mid_term_starts_on);
 
             if (! $day->isWeekend() && ! $onBreak) {
@@ -536,6 +586,10 @@ final class DemoSchoolBuilder
             $habit = ($enrolment->student_id * 37) % 10;
 
             foreach ($days as $date) {
+                if ($date === today()->toDateString() && $enrolment->class_arm_id % 4 === 0) {
+                    continue;
+                }
+
                 $roll = mt_rand(1, 100);
                 $rows[] = [
                     'school_id' => $this->school->id,
@@ -562,6 +616,64 @@ final class DemoSchoolBuilder
 
         if ($rows !== []) {
             DB::table('attendance_records')->insert($rows);
+        }
+    }
+
+    /**
+     * Staff register for every school day of this term so far. Most staff are
+     * present; a few are occasionally late or away.
+     */
+    public function staffAttendance(): void
+    {
+        mt_srand(9191 + $this->school->id);
+
+        $term = Term::current();
+        $days = [];
+
+        for ($day = $term->starts_on->copy(); $day->lte(today()); $day->addDay()) {
+            $onBreak = $term->mid_term_starts_on && $day->between($term->mid_term_starts_on, $term->mid_term_ends_on ?? $term->mid_term_starts_on);
+
+            if (! $day->isWeekend() && ! $onBreak) {
+                $days[] = $day->toDateString();
+            }
+        }
+
+        $now = now();
+        $rows = [];
+
+        foreach (Staff::query()->active()->get(['id']) as $member) {
+            $habit = ($member->id * 41) % 8;
+
+            foreach ($days as $date) {
+                if ($date === today()->toDateString() && $member->id % 5 === 0) {
+                    continue;
+                }
+
+                $roll = mt_rand(1, 100);
+                $rows[] = [
+                    'school_id' => $this->school->id,
+                    'term_id' => $term->id,
+                    'staff_id' => $member->id,
+                    'date' => $date,
+                    'status' => match (true) {
+                        $roll <= 90 - $habit => 'present',
+                        $roll <= 95 - $habit / 2 => 'late',
+                        $roll <= 99 => 'absent',
+                        default => 'excused',
+                    },
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+
+                if (count($rows) >= 2000) {
+                    DB::table('staff_attendance_records')->insert($rows);
+                    $rows = [];
+                }
+            }
+        }
+
+        if ($rows !== []) {
+            DB::table('staff_attendance_records')->insert($rows);
         }
     }
 
@@ -801,5 +913,202 @@ final class DemoSchoolBuilder
     public function currentTerm(): Term
     {
         return Term::current();
+    }
+
+    /**
+     * This term's assignments, quizzes, hand-ins and attempts. $busyTeacher gets a fresh pile to mark.
+     */
+    public function classwork(?string $busyTeacher = null): void
+    {
+        (new DemoClasswork($this->school->id))->build($this->currentTerm(), $busyTeacher ? $this->staffMember($busyTeacher)->id : null);
+    }
+
+    /**
+     * A standard bell schedule, and every class's week filled without teacher clashes.
+     */
+    public function timetable(): void
+    {
+        foreach (Period::DEFAULTS as $position => [$name, $starts, $ends, $kind]) {
+            Period::query()->create(['name' => $name, 'starts_at' => $starts, 'ends_at' => $ends, 'kind' => $kind, 'position' => $position + 1]);
+        }
+
+        $autofill = app(AutofillTimetable::class);
+
+        ClassArm::query()->with('level')->whereHas('enrolments', fn ($query) => $query->where('academic_session_id', $this->currentTerm()->academic_session_id))->get()
+            ->sortBy(fn (ClassArm $arm) => sprintf('%03d-%s', $arm->level->position, $arm->name))
+            ->each(fn (ClassArm $arm) => $autofill->handle($arm));
+    }
+
+    /**
+     * Notices on the board, spending through the year, and this term's exam timetable drafted.
+     */
+    public function office(string $proprietor, string $principal, string $bursar): void
+    {
+        $term = $this->currentTerm();
+        $by = fn (string $key) => $this->staffMember($key)->user_id;
+
+        foreach ([
+            [$principal, 'Exam timetable is out', "The first term examinations start on {$term->ends_on->copy()->subWeeks(2)->startOfWeek()->format('l j F')}. The full timetable is on the portal under Exams. Students should come early with writing materials.", 'everyone', true, 1],
+            [$proprietor, 'PTA meeting this Saturday', 'All parents are invited to the termly PTA meeting on Saturday at 10am in the main hall. We will discuss the new school bus routes and the inter-house sports.', 'parents', false, 3],
+            [$principal, 'Staff briefing on Monday', 'Short staff briefing at 7:15am on Monday in the staff room. Form teachers, please bring your register summaries.', 'staff', false, 4],
+            [$principal, 'Inter-house sports: training schedule', 'House training holds on Tuesdays and Thursdays after school until 4pm. Bring your house T-shirt and trainers.', 'students', false, 6],
+            [$proprietor, 'Mid-term break', "School closes for mid-term on {$term->mid_term_starts_on?->format('l j F')} and resumes on {$term->mid_term_ends_on?->copy()->addDay()->format('l j F')}.", 'everyone', false, 25],
+        ] as [$author, $title, $body, $audience, $pinned, $daysAgo]) {
+            Announcement::query()->create([
+                'title' => $title, 'body' => $body, 'audience' => $audience, 'is_pinned' => $pinned,
+                'published_at' => now()->subDays($daysAgo)->setTime(9, 30), 'created_by' => $by($author),
+            ]);
+        }
+
+        mt_srand(4040 + $this->school->id);
+        $rows = [];
+        $bursarId = $by($bursar);
+
+        foreach (Term::query()->where('starts_on', '<=', today())->get() as $pastTerm) {
+            $period = CashflowPeriod::forTerm($pastTerm);
+            $last = min(today(), $pastTerm->ends_on);
+
+            for ($day = $period->from->copy(); $day->lte($last); $day->addDay()) {
+                $spends = [];
+
+                if ($day->day === 25) {
+                    $spends[] = ['salaries', 'Staff salaries for '.$day->format('F'), mt_rand(380, 460) * 10_000_00, 'Staff payroll', 'transfer'];
+                }
+
+                if ($day->isMonday() && ! $day->isSameDay($period->from)) {
+                    $spends[] = ['power', mt_rand(150, 250).' litres of diesel for the generator', mt_rand(16, 26) * 10_000_00, 'Total filling station', 'cash'];
+                }
+
+                if ($day->isWednesday() && mt_rand(1, 3) === 1) {
+                    $spends[] = $this->people->pick([
+                        ['maintenance', 'Plumbing repairs, girls’ toilets', mt_rand(3, 9) * 10_000_00, 'Mallam Idris (plumber)', 'cash'],
+                        ['stationery', 'Printing of exam papers', mt_rand(4, 12) * 10_000_00, 'Gracefield Prints', 'transfer'],
+                        ['teaching_materials', 'Chemistry lab reagents', mt_rand(5, 15) * 10_000_00, 'Bio-Lab Supplies Ltd', 'transfer'],
+                        ['transport', 'School bus servicing', mt_rand(6, 14) * 10_000_00, 'Peugeot workshop, Kubwa', 'pos'],
+                        ['food', 'Kitchen provisions', mt_rand(4, 10) * 10_000_00, 'Wuse market', 'cash'],
+                        ['events', 'Inter-house sports medals and trophies', mt_rand(5, 12) * 10_000_00, 'Award Centre', 'transfer'],
+                    ]);
+                }
+
+                if ($day->day === 5 && $day->month === 10) {
+                    $spends[] = ['exam_fees', 'NECO BECE registration', 120 * 15_000_00, 'NECO', 'transfer'];
+                }
+
+                foreach ($spends as [$category, $description, $amount, $paidTo, $method]) {
+                    $rows[] = [
+                        'school_id' => $this->school->id, 'ulid' => strtolower((string) Str::ulid()), 'term_id' => $pastTerm->id,
+                        'category' => $category, 'description' => $description, 'amount' => $amount, 'spent_on' => $day->toDateString(),
+                        'paid_to' => $paidTo, 'method' => $method, 'recorded_by' => $bursarId, 'created_at' => now(), 'updated_at' => now(),
+                    ];
+                }
+            }
+        }
+
+        DB::table('expenses')->insert($rows);
+
+        app(GenerateExamTimetable::class)->handle($term, $term->ends_on->copy()->subWeeks(2)->startOfWeek(), ['08:30', '11:30']);
+        ExamPaper::query()->where('term_id', $term->id)->with('classLevel')->get()->each(fn (ExamPaper $paper) => $paper->update([
+            'venue' => in_array($paper->classLevel->section, [ClassSection::Junior, ClassSection::Senior], true) ? 'Main hall' : $paper->classLevel->name.' classroom',
+        ]));
+    }
+
+    /**
+     * A crest for the school, so printed documents show a school logo next to Ta'aleem's.
+     */
+    public function logo(string $colour, string $accent): void
+    {
+        $path = "schools/{$this->school->ulid}/logo-demo.svg";
+        Storage::disk('public')->put($path, DemoFiles::crest($this->school->initials(), $colour, $accent));
+        $this->school->update(['logo_path' => $path]);
+    }
+
+    /**
+     * Uniforms, books and stationery in the store, with some low-stock lines and a few sales.
+     */
+    public function inventory(?string $storeKeeper = 'store'): void
+    {
+        $recorder = $this->staffMember($storeKeeper)->user;
+        $move = app(RecordStockMovement::class);
+
+        $catalogue = [
+            ['Senior school shirt (white)', 'UNI-SHIRT-W', InventoryCategory::Uniforms, 'piece', 4_500_00, 80, 15],
+            ['Senior school shirt (blue)', 'UNI-SHIRT-B', InventoryCategory::Uniforms, 'piece', 4_500_00, 12, 15],
+            ['House T-shirt', 'UNI-HOUSE', InventoryCategory::Uniforms, 'piece', 2_500_00, 45, 20],
+            ['New General Mathematics JSS 1', 'BK-MTH-J1', InventoryCategory::Textbooks, 'piece', 3_200_00, 60, 10],
+            ['New General Mathematics JSS 2', 'BK-MTH-J2', InventoryCategory::Textbooks, 'piece', 3_400_00, 8, 10],
+            ['Comprehensive English JSS 2', 'BK-ENG-J2', InventoryCategory::Textbooks, 'piece', 2_800_00, 35, 10],
+            ['Exercise book (60 leaves)', 'STN-EX-60', InventoryCategory::Stationery, 'piece', 350_00, 200, 40],
+            ['Graph book', 'STN-GRAPH', InventoryCategory::Stationery, 'piece', 450_00, 3, 20],
+            ['Lab coat', 'LAB-COAT', InventoryCategory::Lab, 'piece', 6_500_00, 18, 5],
+            ['Football (size 5)', 'SPT-BALL', InventoryCategory::Sports, 'piece', 8_000_00, 6, 4],
+        ];
+
+        foreach ($catalogue as [$name, $sku, $category, $unit, $cost, $qty, $reorder]) {
+            $item = InventoryItem::query()->create([
+                'name' => $name,
+                'sku' => $sku,
+                'category' => $category,
+                'unit' => $unit,
+                'unit_cost' => $cost,
+                'reorder_level' => $reorder,
+                'quantity_on_hand' => 0,
+                'is_active' => true,
+            ]);
+
+            $move->handle($item, [
+                'type' => StockMovementType::Receive->value,
+                'quantity' => $qty,
+                'unit_cost' => $cost,
+                'note' => 'Opening stock for the term',
+                'moved_at' => now()->subWeeks(3),
+            ], $recorder);
+        }
+
+        $shirt = InventoryItem::query()->where('sku', 'UNI-SHIRT-W')->first();
+        $book = InventoryItem::query()->where('sku', 'BK-MTH-J2')->first();
+        $students = Student::query()->orderBy('id')->limit(4)->get();
+
+        if ($shirt && $students->isNotEmpty()) {
+            $move->handle($shirt, [
+                'type' => StockMovementType::Sale->value,
+                'quantity' => 1,
+                'student_id' => $students[0]->id,
+                'note' => 'Sold at the store',
+                'moved_at' => now()->subDays(5),
+            ], $recorder);
+        }
+
+        if ($book && $students->count() > 1) {
+            $move->handle($book, [
+                'type' => StockMovementType::Issue->value,
+                'quantity' => 2,
+                'note' => 'Issued to JSS 2A maths',
+                'moved_at' => now()->subDays(2),
+            ], $recorder);
+        }
+    }
+
+    /**
+     * Last month’s payroll prepared and marked paid, so the bursar has a history to open.
+     */
+    public function payroll(?string $bursar = 'bursar'): void
+    {
+        $user = $this->staffMember($bursar)->user;
+        $month = now()->subMonthNoOverflow();
+
+        if (Staff::query()->active()->withSalary()->doesntExist()) {
+            return;
+        }
+
+        if (PayrollRun::query()->counted()->where('year', $month->year)->where('month', $month->month)->exists()) {
+            return;
+        }
+
+        ['run' => $run] = app(PreparePayroll::class)->handle($month->year, $month->month, $user);
+        $run->lines()->update(['paid_at' => $month->copy()->endOfMonth()->setTime(14, 0)]);
+        $run->update([
+            'status' => PayrollRunStatus::Paid,
+            'paid_at' => $month->copy()->endOfMonth()->setTime(14, 0),
+        ]);
     }
 }

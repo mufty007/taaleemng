@@ -35,6 +35,11 @@ Route::middleware('school.public')->prefix('/apply/{school}')->name('apply.')->g
     Route::get('/thanks', [ApplicationFormController::class, 'thanks'])->name('thanks');
 });
 
+// What the QR code on an ID card opens: is this card genuine and current?
+Route::middleware(['school.public', 'throttle:60,1'])->get('/verify/{school}/{kind}/{ulid}', [School\IdCardController::class, 'verify'])
+    ->whereIn('kind', ['student', 'staff'])
+    ->name('id-cards.verify');
+
 // Paystack payment notifications (signature-checked, then re-verified with Paystack).
 Route::post('/webhooks/paystack', PaystackWebhookController::class)->name('webhooks.paystack');
 
@@ -62,6 +67,13 @@ Route::middleware('auth')->group(function () {
         ->group(function () {
             Route::get('/', School\DashboardController::class)->name('dashboard');
 
+            // Notice board, for everyone in the school
+            Route::get('/notices', [School\AnnouncementController::class, 'index'])->name('announcements.index');
+            Route::post('/notices', [School\AnnouncementController::class, 'store'])->name('announcements.store');
+            Route::post('/notices/read', [School\AnnouncementController::class, 'markAllRead'])->name('announcements.read');
+            Route::get('/notices/{announcement}', [School\AnnouncementController::class, 'show'])->name('announcements.show');
+            Route::delete('/notices/{announcement}', [School\AnnouncementController::class, 'destroy'])->name('announcements.destroy');
+
             // Parent and student portal
             Route::get('/portal', [PortalController::class, 'index'])->name('portal');
             Route::get('/portal/children/{student}', [PortalController::class, 'child'])->name('portal.child');
@@ -80,8 +92,11 @@ Route::middleware('auth')->group(function () {
                 Route::post('/quizzes/{quiz}/scorebook', [School\ClassworkController::class, 'sendToScorebook'])->name('quizzes.scorebook');
                 Route::post('/assignments', [School\ClassworkController::class, 'storeAssignment'])->name('assignments.store');
                 Route::get('/assignments/{assignment}', [School\ClassworkController::class, 'showAssignment'])->name('assignments.show');
+                Route::get('/submissions/{submission}', [School\ClassworkController::class, 'showSubmission'])->name('submissions.show');
                 Route::patch('/submissions/{submission}', [School\ClassworkController::class, 'markSubmission'])->name('submissions.mark');
             });
+            Route::get('/classwork/assignments/{assignment}/files/{index}', [School\ClassworkFileController::class, 'assignment'])->whereNumber('index')->name('classwork.assignments.file');
+            Route::get('/classwork/submissions/{submission}/files/{index}', [School\ClassworkFileController::class, 'submission'])->whereNumber('index')->name('classwork.submissions.file');
             Route::get('/portal/classwork', [Portal\ClassworkController::class, 'index'])->name('portal.classwork');
             Route::get('/portal/assignments/{assignment}', [Portal\ClassworkController::class, 'assignment'])->name('portal.assignments.show');
             Route::post('/portal/assignments/{assignment}', [Portal\ClassworkController::class, 'submitAssignment'])->name('portal.assignments.submit');
@@ -90,7 +105,38 @@ Route::middleware('auth')->group(function () {
             Route::put('/portal/quizzes/{quiz}/answers', [Portal\ClassworkController::class, 'answer'])->name('portal.quizzes.answer');
             Route::post('/portal/quizzes/{quiz}/submit', [Portal\ClassworkController::class, 'submit'])->name('portal.quizzes.submit');
 
+            // Timetable
+            Route::get('/timetable', [School\TimetableController::class, 'index'])->name('timetable.index');
+            Route::get('/timetable/teachers/{staff}', [School\TimetableController::class, 'teacher'])->name('timetable.teacher');
+            Route::get('/timetable/print/{kind}/{ulid}', [School\TimetableController::class, 'print'])->whereIn('kind', ['class', 'teacher'])->name('timetable.print');
+            Route::middleware('can:timetable.manage')->group(function () {
+                Route::get('/timetable/periods', [School\TimetableController::class, 'periods'])->name('timetable.periods');
+                Route::post('/timetable/periods', [School\TimetableController::class, 'storePeriod'])->name('timetable.periods.store');
+                Route::post('/timetable/periods/defaults', [School\TimetableController::class, 'defaultPeriods'])->name('timetable.periods.defaults');
+                Route::patch('/timetable/periods/{period}', [School\TimetableController::class, 'updatePeriod'])->name('timetable.periods.update');
+                Route::delete('/timetable/periods/{period}', [School\TimetableController::class, 'destroyPeriod'])->name('timetable.periods.destroy');
+                Route::put('/timetable/{classArm}/slots', [School\TimetableController::class, 'saveSlot'])->name('timetable.slots');
+                Route::post('/timetable/{classArm}/autofill', [School\TimetableController::class, 'autofill'])->name('timetable.autofill');
+                Route::post('/timetable/{classArm}/clear', [School\TimetableController::class, 'clear'])->name('timetable.clear');
+            });
+
+            // Exam timetable
+            Route::get('/exams', [School\ExamTimetableController::class, 'index'])->name('exams.index');
+            Route::get('/exams/print', [School\ExamTimetableController::class, 'print'])->name('exams.print');
+            Route::middleware('can:timetable.manage')->group(function () {
+                Route::post('/exams', [School\ExamTimetableController::class, 'store'])->name('exams.store');
+                Route::post('/exams/generate', [School\ExamTimetableController::class, 'generate'])->name('exams.generate');
+                Route::post('/exams/clear', [School\ExamTimetableController::class, 'clear'])->name('exams.clear');
+                Route::patch('/exams/{examPaper}', [School\ExamTimetableController::class, 'update'])->name('exams.update');
+                Route::delete('/exams/{examPaper}', [School\ExamTimetableController::class, 'destroy'])->name('exams.destroy');
+            });
+
             // Attendance
+            Route::middleware('can:attendance.view')->group(function () {
+                Route::get('/attendance/staff', [School\StaffAttendanceController::class, 'register'])->name('attendance.staff');
+                Route::put('/attendance/staff', [School\StaffAttendanceController::class, 'save'])->name('attendance.staff.save');
+                Route::get('/attendance/reports', [School\AttendanceReportController::class, 'index'])->name('attendance.reports');
+            });
             Route::middleware('can:attendance.take')->group(function () {
                 Route::get('/attendance', [School\AttendanceController::class, 'index'])->name('attendance.index');
                 Route::get('/attendance/{classArm}', [School\AttendanceController::class, 'register'])->name('attendance.register');
@@ -104,10 +150,14 @@ Route::middleware('auth')->group(function () {
                 Route::post('/fees/items/defaults', [School\FeeSetupController::class, 'defaults'])->name('fees.items.defaults');
                 Route::patch('/fees/items/{feeItem}', [School\FeeSetupController::class, 'updateItem'])->name('fees.items.update');
                 Route::delete('/fees/items/{feeItem}', [School\FeeSetupController::class, 'destroyItem'])->name('fees.items.destroy');
+                Route::post('/fees/items/{feeItem}/toggle', [School\FeeSetupController::class, 'toggleItem'])->name('fees.items.toggle');
                 Route::put('/fees/schedule', [School\FeeSetupController::class, 'saveSchedule'])->name('fees.schedule.update');
                 Route::post('/fees/schedule/copy', [School\FeeSetupController::class, 'copySchedule'])->name('fees.schedule.copy');
                 Route::post('/invoices/generate', [School\InvoiceController::class, 'generate'])->name('invoices.generate');
+                Route::patch('/invoices/{invoice}', [School\InvoiceController::class, 'update'])->name('invoices.update');
                 Route::post('/invoices/{invoice}/lines', [School\InvoiceController::class, 'addLine'])->name('invoices.lines.store');
+                Route::patch('/invoices/{invoice}/lines/{line}', [School\InvoiceController::class, 'updateLine'])->name('invoices.lines.update');
+                Route::delete('/invoices/{invoice}/lines/{line}', [School\InvoiceController::class, 'destroyLine'])->name('invoices.lines.destroy');
                 Route::post('/invoices/{invoice}/void', [School\InvoiceController::class, 'void'])->name('invoices.void');
             });
             Route::middleware('can:finance.view')->group(function () {
@@ -116,11 +166,38 @@ Route::middleware('auth')->group(function () {
                 Route::get('/payments', [School\PaymentController::class, 'index'])->name('payments.index');
                 Route::get('/debtors', [School\DebtorController::class, 'index'])->name('debtors.index');
             });
+            Route::middleware('can:finance.view')->group(function () {
+                Route::get('/expenses', [School\ExpenseController::class, 'index'])->name('expenses.index');
+                Route::get('/expenses/{expense}/receipt', [School\ExpenseController::class, 'receipt'])->name('expenses.receipt');
+                Route::get('/cashflow', [School\CashflowController::class, 'index'])->name('cashflow.index');
+                Route::get('/cashflow/print', [School\CashflowController::class, 'print'])->name('cashflow.print');
+            });
+            Route::middleware('can:expenses.manage')->group(function () {
+                Route::post('/expenses', [School\ExpenseController::class, 'store'])->name('expenses.store');
+                Route::post('/expenses/{expense}/void', [School\ExpenseController::class, 'void'])->name('expenses.void');
+            });
+            Route::middleware('can:payroll.manage')->group(function () {
+                Route::get('/payroll', [School\PayrollController::class, 'index'])->name('payroll.index');
+                Route::post('/payroll', [School\PayrollController::class, 'store'])->name('payroll.store');
+                Route::get('/payroll/{payrollRun}', [School\PayrollController::class, 'show'])->name('payroll.show');
+                Route::post('/payroll/{payrollRun}/paid', [School\PayrollController::class, 'markPaid'])->name('payroll.paid');
+                Route::post('/payroll/{payrollRun}/void', [School\PayrollController::class, 'void'])->name('payroll.void');
+                Route::post('/payroll/{payrollRun}/lines/{payrollLine}/paid', [School\PayrollController::class, 'markLinePaid'])->name('payroll.line-paid');
+                Route::get('/payroll/{payrollRun}/sheet', [School\PayrollController::class, 'sheet'])->name('payroll.sheet');
+                Route::get('/payroll/{payrollRun}/payslips/{payrollLine}', [School\PayrollController::class, 'payslip'])->name('payroll.payslip');
+            });
+            Route::middleware('can:inventory.manage')->group(function () {
+                Route::get('/inventory', [School\InventoryController::class, 'index'])->name('inventory.index');
+                Route::post('/inventory', [School\InventoryController::class, 'store'])->name('inventory.store');
+                Route::get('/inventory/{inventoryItem}', [School\InventoryController::class, 'show'])->name('inventory.show');
+                Route::post('/inventory/{inventoryItem}/move', [School\InventoryController::class, 'move'])->name('inventory.move');
+            });
             Route::middleware('can:payments.record')->group(function () {
                 Route::post('/students/{student}/payments', [School\PaymentController::class, 'store'])->name('payments.store');
                 Route::post('/payments/{payment}/reverse', [School\PaymentController::class, 'reverse'])->name('payments.reverse');
             });
             Route::get('/receipts/{payment}', [School\PaymentController::class, 'receipt'])->name('payments.receipt');
+            Route::get('/invoices/{invoice}/print', [School\InvoiceController::class, 'print'])->name('invoices.print');
 
             // Academics
             Route::middleware('can:academics.manage')->group(function () {
@@ -197,22 +274,36 @@ Route::middleware('auth')->group(function () {
             Route::get('/students/{student}/edit', [School\StudentController::class, 'edit'])->name('students.edit');
             Route::put('/students/{student}', [School\StudentController::class, 'update'])->name('students.update');
             Route::post('/students/{student}/password', [School\StudentController::class, 'resetPassword'])->name('students.password');
+            Route::post('/students/{student}/photo', [School\PhotoController::class, 'updateStudent'])->name('students.photo');
+            Route::get('/photos/students/{student}', [School\PhotoController::class, 'student'])->name('photos.student');
+            Route::get('/photos/staff/{staff}', [School\PhotoController::class, 'staff'])->name('photos.staff');
+            Route::post('/staff/{staff}/photo', [School\PhotoController::class, 'updateStaff'])->middleware('can:staff.manage')->name('staff.photo');
+
+            // ID cards
+            Route::get('/id-cards', [School\IdCardController::class, 'index'])->name('id-cards.index');
+            Route::get('/id-cards/students', [School\IdCardController::class, 'students'])->middleware('can:students.manage')->name('id-cards.students');
+            Route::get('/id-cards/staff', [School\IdCardController::class, 'staff'])->middleware('can:staff.manage')->name('id-cards.staff');
 
             Route::middleware('can:staff.view')->group(function () {
                 Route::get('/staff', [School\StaffController::class, 'index'])->name('staff.index');
                 Route::get('/staff/create', [School\StaffController::class, 'create'])->middleware('can:staff.manage')->name('staff.create');
                 Route::post('/staff', [School\StaffController::class, 'store'])->middleware('can:staff.manage')->name('staff.store');
                 Route::get('/staff/{staff}', [School\StaffController::class, 'show'])->name('staff.show');
+                Route::get('/staff/{staff}/edit', [School\StaffController::class, 'edit'])->middleware('can:staff.manage')->name('staff.edit');
+                Route::put('/staff/{staff}', [School\StaffController::class, 'update'])->middleware('can:staff.manage')->name('staff.update');
             });
 
             // System
             Route::middleware('can:school.manage')->group(function () {
                 Route::get('/school-information', [School\SchoolProfileController::class, 'edit'])->name('profile.edit');
                 Route::put('/school-information', [School\SchoolProfileController::class, 'update'])->name('profile.update');
+                Route::get('/settings', [School\SettingsController::class, 'edit'])->name('settings.edit');
+                Route::put('/settings', [School\SettingsController::class, 'update'])->name('settings.update');
             });
 
             Route::middleware('can:users.manage')->group(function () {
                 Route::get('/users', [School\MemberController::class, 'index'])->name('members.index');
+                Route::post('/users/{user:ulid}/role', [School\MemberController::class, 'updateRole'])->name('members.role');
                 Route::post('/users/{user:ulid}/toggle', [School\MemberController::class, 'toggle'])->name('members.toggle');
                 Route::post('/users/{user:ulid}/invite', [School\MemberController::class, 'invite'])->name('members.invite');
             });

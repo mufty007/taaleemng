@@ -32,7 +32,7 @@ class GenerateInvoices
         $levelOfArm = ClassArm::query()->pluck('class_level_id', 'id');
         $schedule = FeeStructure::query()
             ->where('term_id', $term->id)
-            ->whereHas('feeItem', fn ($query) => $query->where('is_optional', false))
+            ->whereHas('feeItem', fn ($query) => $query->where('is_optional', false)->where('is_active', true))
             ->with('feeItem')
             ->get()
             ->sortBy(fn (FeeStructure $structure) => sprintf('%05d-%s', $structure->feeItem->position, $structure->feeItem->name))

@@ -5,7 +5,7 @@
     <div class="flex min-h-screen flex-col bg-canvas">
         <header class="border-b border-line bg-white">
             <div class="mx-auto flex max-w-3xl items-center gap-4 px-4 py-5 sm:px-6">
-                <span class="grid size-12 flex-none place-items-center rounded-2xl bg-ink text-base font-bold text-white" aria-hidden="true">{{ $school->short_code }}</span>
+                <x-school-crest :school="$school" class="size-12 flex-none rounded-2xl text-base" />
                 <div class="min-w-0">
                     <div class="truncate text-lg font-bold tracking-[-0.02em]">{{ $school->name }}</div>
                     <div class="truncate text-sm text-muted">{{ $school->motto ?: trim(($school->lga ? $school->lga.', ' : '').($school->state ?? '')) }}</div>

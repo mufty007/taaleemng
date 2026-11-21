@@ -64,7 +64,7 @@
                             <tr class="border-t border-line hover:bg-canvas">
                                 <td class="px-5 py-3">
                                     <a href="{{ route('school.students.show', $student) }}" class="flex items-center gap-3">
-                                        <span @class(['grid size-9 flex-none place-items-center rounded-full text-xs font-semibold', 'bg-[#FFD6D2]' => $student->gender === \App\Enums\Gender::Female, 'bg-sky-100' => $student->gender === \App\Enums\Gender::Male])>{{ $student->initials() }}</span>
+                                        <x-avatar :person="$student" class="size-9 rounded-full text-xs" />
                                         <span class="min-w-0">
                                             <span class="block truncate font-semibold">{{ $student->registerName() }}</span>
                                             <span class="block text-sm text-muted">{{ $student->gender->label() }}</span>

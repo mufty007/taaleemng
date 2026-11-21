@@ -7,10 +7,12 @@ use App\Enums\ClassworkStatus;
 use App\Enums\InvoiceStatus;
 use App\Enums\PaymentStatus;
 use App\Http\Controllers\Controller;
+use App\Models\Announcement;
 use App\Models\Assignment;
 use App\Models\AssignmentSubmission;
 use App\Models\AttendanceRecord;
 use App\Models\ClassSubject;
+use App\Models\ExamPaper;
 use App\Models\Quiz;
 use App\Models\QuizAttempt;
 use App\Models\ResultPublication;
@@ -19,8 +21,10 @@ use App\Models\Term;
 use App\Support\Attendance\AttendanceSummary;
 use App\Support\Payments\Paystack;
 use App\Support\Results\ResultCalculator;
+use App\Support\Timetable\Timetable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 
 /**
@@ -50,7 +54,10 @@ class PortalController extends Controller
                 'children' => $children,
                 'balances' => $children->mapWithKeys(fn (Student $child) => [$child->id => AllocatePayments::balance($child)]),
                 'term' => $term,
-            ]);
+                'latestNotices' => $this->latestNotices($request),
+                'attendance' => $term
+                    ? AttendanceSummary::forTerm($term, $children->map(fn (Student $child) => $child->currentEnrolment?->id)->filter()->values()->all())
+                    : [],            ]);
         }
 
         return $this->studentView($student, $term, ownProfile: true);
@@ -65,6 +72,16 @@ class PortalController extends Controller
     }
 
     /**
+     * @return Collection<int, Announcement>
+     */
+    private function latestNotices(Request $request): Collection
+    {
+        $user = $request->user();
+
+        return Announcement::query()->visibleTo($user)->with(['reads' => fn ($query) => $query->where('user_id', $user->id)])->noticeBoardOrder()->limit(3)->get();
+    }
+
+    /**
      * This term's register and classwork for the student, for both portals.
      *
      * @return array<string, mixed>
@@ -73,8 +90,16 @@ class PortalController extends Controller
     {
         $enrolment = $student->currentEnrolment;
         $subjectIds = $enrolment ? ClassSubject::query()->where('class_arm_id', $enrolment->class_arm_id)->pluck('id') : collect();
+        $lessons = $enrolment ? Timetable::forClass($enrolment->classArm) : collect();
 
         return [
+            'latestNotices' => $this->latestNotices(request()),
+            'examPapers' => $term && $enrolment
+                ? ExamPaper::query()->with(['subject', 'invigilator'])->where('term_id', $term->id)->where('class_level_id', $enrolment->classArm->class_level_id)->orderBy('starts_at')->get()
+                : collect(),
+            'periods' => Timetable::periods(),
+            'timetable' => Timetable::grid($lessons),
+            'todayLessons' => Timetable::today($lessons),
             'attendance' => $term && $enrolment ? AttendanceSummary::forTerm($term, [$enrolment->id])[$enrolment->id] : null,
             'recentAttendance' => $enrolment ? AttendanceRecord::query()->where('enrolment_id', $enrolment->id)->latest('date')->limit(15)->get() : collect(),
             'assignments' => Assignment::query()->with('classSubject.subject')->whereIn('class_subject_id', $subjectIds)

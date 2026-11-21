@@ -7,6 +7,11 @@
 <x-layouts.app title="Attendance">
     <x-page-header kicker="Attendance" :title="$date->isToday() ? 'Today’s registers' : 'Registers for '.$date->format('l j M')" :description="$term ? $term->name.' · '.$term->academicSession->name : 'This day is not within a term.'">
         <x-slot:actions>
+            @can('attendance.view')
+                <x-button variant="ghost" icon="bar-chart-3" :href="route('school.attendance.reports')">Reports</x-button>
+                <x-button variant="ghost" icon="briefcase" :href="route('school.attendance.staff', ['date' => $date->toDateString()])">Staff register</x-button>
+            @endcan
+
             <form method="GET" class="flex items-center gap-2">
                 <label for="date" class="sr-only">Day</label>
                 <input id="date" name="date" type="date" value="{{ $date->toDateString() }}" max="{{ today()->toDateString() }}" class="field w-44 bg-white py-2" x-data x-on:change="$el.form.requestSubmit()">

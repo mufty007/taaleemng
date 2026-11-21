@@ -16,19 +16,32 @@
 
     @if ($done->isNotEmpty())
         <x-card>
-            <form method="POST" action="{{ route('school.classwork.quizzes.scorebook', $quiz) }}" class="flex flex-wrap items-end gap-3">
-                @csrf
+            <div class="flex flex-wrap items-end gap-3">
                 <div class="flex flex-col gap-1.5">
-                    <label for="component_id" class="text-sm font-semibold">Use these marks as</label>
-                    <select id="component_id" name="component_id" class="field w-56 py-2">
-                        @foreach ($components as $component)<option value="{{ $component->id }}">{{ $component->name }} (out of {{ $component->max_score }})</option>@endforeach
+                    <label for="component_id_preview" class="text-sm font-semibold">Use these marks as</label>
+                    <select id="component_id_preview" class="field w-56 py-2" form="scorebook-form" name="component_id">
+                        @foreach ($components as $component)<option value="{{ $component->id }}" @selected((string) old('component_id') === (string) $component->id)>{{ $component->name }} (out of {{ $component->max_score }})</option>@endforeach
                     </select>
                 </div>
-                <x-button variant="secondary" icon="file-pen-line" onclick="return confirm('Replace these students’ scores for that component with their quiz percentage?')">Send to scorebook</x-button>
+                <x-button variant="secondary" icon="file-pen-line" type="button" x-data x-on:click="$dispatch('open-modal', 'send-scorebook')">Send to scorebook</x-button>
                 <p class="m-0 text-sm text-muted">Each student’s percentage becomes their score, e.g. 75% → 15 out of 20.</p>
-            </form>
+            </div>
             @error('component')<p class="m-0 mt-2 text-sm font-medium text-danger">{{ $message }}</p>@enderror
         </x-card>
+
+        <x-modal name="send-scorebook" title="Send to scorebook?" description="This replaces any scores already entered for the chosen component for students who finished this quiz." :show="$errors->has('component')">
+            <form id="scorebook-form" method="POST" action="{{ route('school.classwork.quizzes.scorebook', $quiz) }}" class="flex flex-col gap-4">
+                @csrf
+                <p class="m-0 text-[15px] text-muted">
+                    {{ $done->count() }} {{ \Illuminate\Support\Str::plural('student', $done->count()) }} will get a score from their quiz percentage.
+                    Students who have not submitted are left alone.
+                </p>
+                <div class="flex flex-wrap gap-2">
+                    <x-button variant="brand" icon="file-pen-line">Replace scores</x-button>
+                    <x-button variant="ghost" type="button" x-data x-on:click="$dispatch('close-modal', 'send-scorebook')">Cancel</x-button>
+                </div>
+            </form>
+        </x-modal>
     @endif
 
     <x-card :padding="false">

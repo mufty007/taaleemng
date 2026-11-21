@@ -5,23 +5,103 @@
         :description="($session ? $session->name.' · ' : '').$enrolments->count().' students · '.$classArm->classSubjects->count().' subjects'"
     >
         <x-slot:actions>
-            @if ($canRegister)
-                <x-button variant="secondary" icon="clipboard-check" :href="route('school.attendance.register', $classArm)">Take register</x-button>
-            @endif
             @if ($myClassSubjectId)
                 <x-button variant="secondary" icon="notebook-pen" :href="route('school.classwork.index', ['class_subject' => $myClassSubjectId, 'new' => 'assignment'])">New assignment</x-button>
                 <x-button icon="monitor-check" :href="route('school.classwork.index', ['class_subject' => $myClassSubjectId, 'new' => 'quiz'])">New quiz</x-button>
             @endif
-            <x-button variant="secondary" icon="users" :href="route('school.students.index', ['class' => $classArm->ulid])">Student list</x-button>
         </x-slot:actions>
     </x-page-header>
 
-    <x-tabs :tabs="['students' => ['label' => 'Students', 'count' => $enrolments->count()], 'subjects' => ['label' => 'Subjects & teachers', 'count' => $classArm->classSubjects->count()], 'settings' => 'Settings']" label="Class sections">
+    @php
+        $counts = $register->counts();
+        $marked = array_sum($counts);
+    @endphp
+    <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <x-stat-card label="Students" :value="(string) $enrolments->count()" icon="users" :hint="$enrolments->where('student.gender', \App\Enums\Gender::Female)->count().' girls · '.$enrolments->where('student.gender', \App\Enums\Gender::Male)->count().' boys'" />
+        <x-stat-card label="Today" :value="$marked ? ($counts['present'] + $counts['late']).' in' : 'Not taken'" icon="clipboard-check" :tone="$marked ? 'naija' : 'gold'" :hint="$marked ? $counts['absent'].' absent · '.$counts['late'].' late' : ($register->locked ? 'No register today' : 'Register not taken yet')" />
+        <x-stat-card label="Attendance this term" :value="$attendanceRate !== null ? $attendanceRate.'%' : '—'" icon="calendar-check" tone="sky" :hint="$register->term?->name" />
+        <x-stat-card label="Classwork this term" :value="(string) ($assignments->count() + $quizzes->count())" icon="notebook-pen" tone="gold" :hint="$assignments->count().' assignments · '.$quizzes->count().' quizzes'" />
+    </div>
+
+    <x-tabs
+        :tabs="array_filter([
+            'register' => $canRegister || $myClassSubjectId ? ['label' => 'Register', 'count' => $marked.'/'.$enrolments->count()] : null,
+            'students' => ['label' => 'Students', 'count' => $enrolments->count()],
+            'classwork' => $myClassSubjectId ? ['label' => 'Classwork', 'count' => $assignments->count() + $quizzes->count()] : null,
+            'timetable' => 'Timetable',
+            'subjects' => ['label' => 'Subjects & teachers', 'count' => $classArm->classSubjects->count()],
+            'settings' => 'Settings',
+        ])"
+        :default="$canRegister && ! $register->locked && ! $register->isTaken() ? 'register' : 'students'"
+        label="Class sections"
+    >
+        @if ($canRegister || $myClassSubjectId)
+            <x-tab name="register">
+                @include('school.attendance._register', ['compact' => true, 'readOnly' => ! $canRegister])
+            </x-tab>
+        @endif
+
+        <x-tab name="timetable">
+            <x-card :padding="false" class="p-2">
+                @if ($timetable)
+                    @include('school.timetable._week', ['show' => 'class', 'grid' => $timetable])
+                @else
+                    <x-empty-state icon="calendar-days" title="No timetable for this class yet">
+                        @can('timetable.manage')
+                            <x-button icon="calendar-days" :href="route('school.timetable.index', ['class' => $classArm->ulid])">Build it</x-button>
+                        @endcan
+                    </x-empty-state>
+                @endif
+            </x-card>
+        </x-tab>
+
+        @if ($myClassSubjectId)
+            <x-tab name="classwork">
+                <div class="flex flex-col gap-4">
+                    <div class="flex flex-wrap gap-2">
+                        <x-button variant="brand" icon="notebook-pen" :href="route('school.classwork.index', ['class_subject' => $myClassSubjectId, 'new' => 'assignment'])">New assignment</x-button>
+                        <x-button variant="secondary" icon="monitor-check" :href="route('school.classwork.index', ['class_subject' => $myClassSubjectId, 'new' => 'quiz'])">New quiz or exam</x-button>
+                    </div>
+                    <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                        <x-card :padding="false">
+                            <h2 class="m-0 border-b border-line px-5 py-3 text-base font-semibold">Assignments</h2>
+                            @forelse ($assignments as $assignment)
+                                <a href="{{ route('school.classwork.assignments.show', $assignment) }}" class="flex items-center gap-3 border-b border-line px-5 py-3 last:border-b-0 hover:bg-canvas">
+                                    <div class="min-w-0 flex-1">
+                                        <div class="truncate font-medium">{{ $assignment->title }}</div>
+                                        <div class="text-sm text-muted">{{ $assignment->classSubject->subject->name }} · due {{ $assignment->due_at->format('D j M') }}</div>
+                                    </div>
+                                    <span class="text-sm whitespace-nowrap text-muted">{{ $assignment->submissions_count }}/{{ $enrolments->count() }} in</span>
+                                </a>
+                            @empty
+                                <p class="m-0 px-5 py-4 text-sm text-muted">No assignments this term.</p>
+                            @endforelse
+                        </x-card>
+                        <x-card :padding="false">
+                            <h2 class="m-0 border-b border-line px-5 py-3 text-base font-semibold">Quizzes, tests &amp; exams</h2>
+                            @forelse ($quizzes as $quiz)
+                                <a href="{{ route('school.classwork.quizzes.edit', $quiz) }}" class="flex items-center gap-3 border-b border-line px-5 py-3 last:border-b-0 hover:bg-canvas">
+                                    <div class="min-w-0 flex-1">
+                                        <div class="truncate font-medium">{{ $quiz->title }}</div>
+                                        <div class="text-sm text-muted">{{ $quiz->classSubject->subject->name }} · {{ $quiz->kind->label() }} · {{ $quiz->questions_count }} questions</div>
+                                    </div>
+                                    <x-badge :tone="$quiz->status === \App\Enums\ClassworkStatus::Published ? ($quiz->isOpen() ? 'naija' : 'neutral') : 'gold'">{{ $quiz->status === \App\Enums\ClassworkStatus::Published ? ($quiz->isOpen() ? 'Open' : ($quiz->hasClosed() ? 'Closed' : 'Scheduled')) : 'Draft' }}</x-badge>
+                                    <span class="text-sm whitespace-nowrap text-muted">{{ $quiz->attempts_count }} done</span>
+                                </a>
+                            @empty
+                                <p class="m-0 px-5 py-4 text-sm text-muted">No quizzes this term.</p>
+                            @endforelse
+                        </x-card>
+                    </div>
+                </div>
+            </x-tab>
+        @endif
+
         <x-tab name="students">
         <x-card :padding="false">
             <div class="flex flex-wrap items-center justify-between gap-3 border-b border-line px-6 py-4">
-                <h2 class="m-0 text-lg font-semibold">Class register</h2>
-                <span class="text-sm text-muted">{{ $enrolments->where('student.gender', \App\Enums\Gender::Female)->count() }} girls · {{ $enrolments->where('student.gender', \App\Enums\Gender::Male)->count() }} boys</span>
+                <h2 class="m-0 text-lg font-semibold">Students</h2>
+                <x-button variant="ghost" size="sm" icon="list" :href="route('school.students.index', ['class' => $classArm->ulid])">Full student list</x-button>
             </div>
             @if ($enrolments->isEmpty())
                 <x-empty-state icon="graduation-cap" title="No students in this class yet" />
@@ -43,7 +123,7 @@
                                     <td class="px-6 py-3 text-muted">{{ $index + 1 }}</td>
                                     <td class="px-3 py-3">
                                         <a href="{{ route('school.students.show', $student) }}" class="flex items-center gap-2.5 font-medium hover:text-brand-600">
-                                            <span @class(['grid size-8 flex-none place-items-center rounded-full text-[11px] font-semibold', 'bg-[#FFD6D2]' => $student->gender === \App\Enums\Gender::Female, 'bg-sky-100' => $student->gender === \App\Enums\Gender::Male])>{{ $student->initials() }}</span>
+                                            <x-avatar :person="$student" class="size-8 rounded-full text-[11px]" />
                                             {{ $student->registerName() }}
                                         </a>
                                     </td>

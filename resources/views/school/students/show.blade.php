@@ -13,7 +13,11 @@
     <x-credentials />
 
     <div class="flex flex-wrap items-center gap-5 rounded-3xl border border-line bg-white p-6" data-enter>
-        <span @class(['grid size-20 flex-none place-items-center rounded-3xl text-2xl font-bold', 'bg-[#FFD6D2]' => $student->gender === \App\Enums\Gender::Female, 'bg-sky-100' => $student->gender === \App\Enums\Gender::Male])>{{ $student->initials() }}</span>
+        @can('update', $student)
+            <x-photo-upload :person="$student" :action="route('school.students.photo', $student)" :name="$student->first_name" />
+        @else
+            <x-avatar :person="$student" class="size-20 rounded-3xl text-2xl" />
+        @endcan
         <div class="min-w-0 flex-1">
             <h1 class="m-0 text-[28px] leading-tight font-bold tracking-[-0.03em]">{{ $student->fullName() }}</h1>
             <div class="mt-1.5 flex flex-wrap items-center gap-2 text-[15px] text-muted">
