@@ -116,6 +116,7 @@ Route::middleware('auth')->group(function () {
                 Route::patch('/timetable/periods/{period}', [School\TimetableController::class, 'updatePeriod'])->name('timetable.periods.update');
                 Route::delete('/timetable/periods/{period}', [School\TimetableController::class, 'destroyPeriod'])->name('timetable.periods.destroy');
                 Route::put('/timetable/{classArm}/slots', [School\TimetableController::class, 'saveSlot'])->name('timetable.slots');
+                Route::post('/timetable/autofill-all', [School\TimetableController::class, 'autofillAll'])->name('timetable.autofill-all');
                 Route::post('/timetable/{classArm}/autofill', [School\TimetableController::class, 'autofill'])->name('timetable.autofill');
                 Route::post('/timetable/{classArm}/clear', [School\TimetableController::class, 'clear'])->name('timetable.clear');
             });
@@ -136,6 +137,7 @@ Route::middleware('auth')->group(function () {
                 Route::get('/attendance/staff', [School\StaffAttendanceController::class, 'register'])->name('attendance.staff');
                 Route::put('/attendance/staff', [School\StaffAttendanceController::class, 'save'])->name('attendance.staff.save');
                 Route::get('/attendance/reports', [School\AttendanceReportController::class, 'index'])->name('attendance.reports');
+                Route::post('/attendance/mark-remaining', [School\AttendanceController::class, 'markRemaining'])->name('attendance.mark-remaining');
             });
             Route::middleware('can:attendance.take')->group(function () {
                 Route::get('/attendance', [School\AttendanceController::class, 'index'])->name('attendance.index');
@@ -299,6 +301,8 @@ Route::middleware('auth')->group(function () {
                 Route::put('/school-information', [School\SchoolProfileController::class, 'update'])->name('profile.update');
                 Route::get('/settings', [School\SettingsController::class, 'edit'])->name('settings.edit');
                 Route::put('/settings', [School\SettingsController::class, 'update'])->name('settings.update');
+                Route::get('/reports', [School\ReportController::class, 'index'])->name('reports.index');
+                Route::get('/reports/{report}', [School\ReportController::class, 'show'])->whereIn('report', ['enrolment', 'fees', 'attendance', 'staff'])->name('reports.show');
             });
 
             Route::middleware('can:users.manage')->group(function () {

@@ -90,7 +90,7 @@ class DatabaseSeeder extends Seeder
             $b->staff('proprietor', ['title' => 'Dr.', 'first' => 'Ngozi', 'last' => 'Okafor', 'gender' => 'female', 'email' => 'proprietor@greenfield.test', 'designation' => 'Proprietor', 'department' => 'Management', 'qualification' => 'PhD Educational Management', 'joined' => '2009-09-01'], SchoolRole::SchoolAdmin);
             $b->staff('principal', ['title' => 'Mrs.', 'first' => 'Funke', 'last' => 'Adebayo', 'gender' => 'female', 'email' => 'principal@greenfield.test', 'designation' => 'Principal', 'department' => 'Management', 'qualification' => 'M.Ed Educational Administration'], SchoolRole::Principal);
             $b->staff('vice-principal', ['title' => 'Mr.', 'first' => 'Ibrahim', 'last' => 'Danjuma', 'gender' => 'male', 'email' => 'vp@greenfield.test', 'designation' => 'Vice Principal (Academics)', 'department' => 'Management'], SchoolRole::Principal);
-            $b->staff('head-teacher', ['title' => 'Mrs.', 'first' => 'Chioma', 'last' => 'Eze', 'gender' => 'female', 'email' => 'headteacher@greenfield.test', 'designation' => 'Head Teacher (Nursery & Primary)', 'department' => 'Nursery & Primary'], SchoolRole::Principal);
+            $b->staff('head-teacher', ['title' => 'Mrs.', 'first' => 'Chioma', 'last' => 'Eze', 'gender' => 'female', 'email' => 'headteacher@greenfield.test', 'designation' => 'Head Teacher (Nursery & Primary)', 'department' => 'Nursery & Primary'], SchoolRole::HeadTeacher);
             $b->staff('bursar', ['title' => 'Mrs.', 'first' => 'Grace', 'last' => 'Udo', 'gender' => 'female', 'email' => 'bursar@greenfield.test', 'designation' => 'Bursar', 'department' => 'Accounts', 'qualification' => 'B.Sc Accounting, ACA'], SchoolRole::Bursar);
             $b->staff('admin-officer', ['title' => 'Mr.', 'first' => 'Kelechi', 'last' => 'Ibe', 'gender' => 'male', 'email' => 'office@greenfield.test', 'designation' => 'Admin Officer', 'department' => 'Administration', 'qualification' => 'HND Office Technology'], SchoolRole::SchoolAdmin);
             $b->staff('store', ['title' => 'Mr.', 'first' => 'Tunde', 'last' => 'Bakare', 'gender' => 'male', 'email' => 'store@greenfield.test', 'designation' => 'Store Keeper', 'department' => 'Administration', 'qualification' => 'OND Business Administration'], SchoolRole::StoreKeeper);
@@ -246,7 +246,7 @@ class DatabaseSeeder extends Seeder
             $b->sessions(self::CURRENT_YEAR - 1, self::CURRENT_YEAR);
 
             $b->staff('proprietor', ['title' => 'Ustadh', 'first' => 'Ibrahim', 'last' => 'Musa', 'gender' => 'male', 'email' => 'admin@alnoor.test', 'designation' => 'Proprietor', 'department' => 'Management', 'qualification' => 'B.A Islamic Studies, M.Ed', 'joined' => '2015-01-12'], SchoolRole::SchoolAdmin);
-            $b->staff('head', ['title' => 'Malam', 'first' => 'Kabiru', 'last' => 'Yusuf', 'gender' => 'male', 'email' => 'head@alnoor.test', 'designation' => 'Head Teacher', 'department' => 'Management'], SchoolRole::Principal);
+            $b->staff('head', ['title' => 'Malam', 'first' => 'Kabiru', 'last' => 'Yusuf', 'gender' => 'male', 'email' => 'head@alnoor.test', 'designation' => 'Head Teacher', 'department' => 'Management'], SchoolRole::HeadTeacher);
             $b->staff('bursar', ['title' => 'Malam', 'first' => 'Aliyu', 'last' => 'Garba', 'gender' => 'male', 'email' => 'bursar@alnoor.test', 'designation' => 'Bursar', 'department' => 'Accounts'], SchoolRole::Bursar);
             $b->staff('sani', ['title' => 'Mallam', 'first' => 'Sani', 'last' => 'Abubakar', 'gender' => 'male', 'email' => 'sani@teachers.test', 'designation' => 'Arabic & Islamic Studies Teacher', 'department' => 'Islamiyya'], SchoolRole::Teacher);
             $b->staff('quran', ['title' => 'Malama', 'first' => 'Hadiza', 'last' => 'Umar', 'gender' => 'female', 'email' => 'hadiza.umar@alnoor.test', 'designation' => 'Qur’an & Tajweed Teacher', 'department' => 'Islamiyya', 'qualification' => 'Diploma in Qur’anic Studies'], SchoolRole::Teacher);
@@ -369,7 +369,9 @@ class DatabaseSeeder extends Seeder
             ['Proprietor (school admin)', 'Greenfield Academy', 'proprietor@greenfield.test'],
             ['Admin officer (school admin)', 'Greenfield Academy', 'office@greenfield.test'],
             ['Principal', 'Greenfield Academy', 'principal@greenfield.test'],
+            ['Head Teacher (Nursery & Primary)', 'Greenfield Academy', 'headteacher@greenfield.test'],
             ['Bursar', 'Greenfield Academy', 'bursar@greenfield.test'],
+
             ['Teacher, form teacher of JSS 2A', 'Greenfield Academy', 'teacher@greenfield.test'],
             ['Teacher in two schools', 'Greenfield + Al-Noor', 'sani@teachers.test'],
             ['Parent of 3 (+1 at Al-Noor)', 'Greenfield + Al-Noor', '0802 123 4567'],

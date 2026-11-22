@@ -39,15 +39,17 @@
             </x-card>
 
             <x-card class="flex flex-col gap-4">
-                <h2 class="m-0 text-lg font-semibold">Payments</h2>
-                <p class="m-0 text-sm text-muted">Optional Paystack subaccount so online fee payments settle into the school’s own Paystack account.</p>
-                <x-field
-                    label="Paystack subaccount code"
-                    name="paystack_subaccount"
-                    :value="old('paystack_subaccount', $paystackSubaccount)"
-                    placeholder="ACCT_xxxxxxxx"
-                    hint="Leave blank to use the platform Paystack account."
-                />
+                <h2 class="m-0 text-lg font-semibold">Online fee payouts</h2>
+                <p class="m-0 text-sm text-muted">Parents pay through Ta’aleem’s Paystack. Settlements go straight to this school’s bank account — you do not need your own Paystack keys.</p>
+                @unless ($platformPaystackReady)
+                    <div class="rounded-2xl border border-gold-200 bg-gold-50 px-4 py-3 text-sm text-gold">Platform Paystack is not configured yet. Bank details can be saved once support turns it on.</div>
+                @endunless
+                @if ($paystackReady)
+                    <div class="rounded-2xl border border-naija/20 bg-naija/5 px-4 py-3 text-sm text-naija-700">Online payouts are connected for this school.</div>
+                @endif
+                <x-select-field label="Bank" name="payout_bank_code" :options="$banks" :value="old('payout_bank_code', $payoutBankCode)" placeholder="Choose bank" />
+                <x-field label="Account number" name="payout_account_number" :value="old('payout_account_number', $payoutAccountNumber)" placeholder="0123456789" inputmode="numeric" maxlength="10" hint="10-digit NUBAN." />
+                <x-field label="Account name" name="payout_account_name" :value="old('payout_account_name', $payoutAccountName)" placeholder="Greenfield Academy" />
                 <p class="m-0 text-sm text-muted">School profile details (name, logo, address) are under <a href="{{ route('school.profile.edit') }}" class="font-semibold text-brand-600 hover:text-ink">School information</a>.</p>
             </x-card>
         </div>

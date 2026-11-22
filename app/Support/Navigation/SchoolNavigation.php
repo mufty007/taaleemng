@@ -60,10 +60,13 @@ final class SchoolNavigation
             ],
             'System' => [
                 ['School information', 'school', 'school.profile.edit', 'school.manage', 'school.profile.*'],
+                ['Reports', 'bar-chart-3', 'school.reports.index', 'school.manage', 'school.reports.*'],
+
                 ['Users & roles', 'users-round', 'school.members.index', 'users.manage', 'school.members.*'],
                 ['Activity log', 'history', 'school.activity.index', 'activity.view', 'school.activity.*'],
                 ['Settings', 'settings', 'school.settings.edit', 'school.manage', 'school.settings.*'],
             ],
+
         ];
 
         // A teacher who is also a parent at the same school.

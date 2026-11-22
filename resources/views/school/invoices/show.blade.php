@@ -52,7 +52,7 @@
                                             <span class="ml-auto flex gap-0.5 opacity-60 transition group-hover:opacity-100">
                                                 <button type="button" class="grid size-8 place-items-center rounded-lg text-muted hover:bg-chip hover:text-ink" aria-label="Edit {{ $line->description }}" x-data x-on:click="$dispatch('edit-line', { action: @js(route('school.invoices.lines.update', [$invoice, $line])), values: @js(['description' => $line->description, 'amount' => \App\Support\Money::toNaira($line->amount), 'discount' => $line->amount < 0]) })"><x-lucide-pencil class="size-3.5" aria-hidden="true" /></button>
                                                 @if ($invoice->lines->count() > 1)
-                                                    <form method="POST" action="{{ route('school.invoices.lines.destroy', [$invoice, $line]) }}" x-data x-on:submit="if (! confirm(@js('Remove '.$line->description.' from this invoice?'))) $event.preventDefault()">
+                                                    <form method="POST" action="{{ route('school.invoices.lines.destroy', [$invoice, $line]) }}" data-confirm="{{ 'Remove '.$line->description.' from this invoice?' }}" data-confirm-title="Remove line?" data-confirm-action="Remove">
                                                         @csrf
                                                         @method('DELETE')
                                                         <button type="submit" class="grid size-8 place-items-center rounded-lg text-muted hover:bg-danger-50 hover:text-danger" aria-label="Remove {{ $line->description }}"><x-lucide-trash-2 class="size-3.5" aria-hidden="true" /></button>

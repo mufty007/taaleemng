@@ -6,10 +6,10 @@ use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 
 /**
- * The parts of the Paystack API that school fees need: start a payment, check
- * it, and confirm that a webhook really came from Paystack.
+ * Platform Paystack: fee checkout and school payout subaccounts.
  *
  * @see https://paystack.com/docs/api/transaction/
+ * @see https://paystack.com/docs/api/subaccount/
  */
 class Paystack
 {
@@ -33,6 +33,34 @@ class Paystack
             'metadata' => $metadata,
             'subaccount' => $subaccount,
         ]))->throw()->json('data');
+    }
+
+    /**
+     * Create a Paystack subaccount so settlements land in the school's bank.
+     *
+     * @return array{subaccount_code: string, ...}
+     */
+    public function createSubaccount(string $businessName, string $settlementBank, string $accountNumber, string $percentageCharge = '0'): array
+    {
+        return (array) $this->client()->post('/subaccount', [
+            'business_name' => $businessName,
+            'settlement_bank' => $settlementBank,
+            'account_number' => $accountNumber,
+            'percentage_charge' => $percentageCharge,
+        ])->throw()->json('data');
+    }
+
+    /**
+     * @return array{subaccount_code: string, ...}
+     */
+    public function updateSubaccount(string $code, string $businessName, string $settlementBank, string $accountNumber, string $percentageCharge = '0'): array
+    {
+        return (array) $this->client()->put('/subaccount/'.rawurlencode($code), [
+            'business_name' => $businessName,
+            'settlement_bank' => $settlementBank,
+            'account_number' => $accountNumber,
+            'percentage_charge' => $percentageCharge,
+        ])->throw()->json('data');
     }
 
     /**

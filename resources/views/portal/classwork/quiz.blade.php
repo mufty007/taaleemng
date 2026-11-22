@@ -32,7 +32,10 @@
     @elseif ($taking)
         <form method="POST" action="{{ route('school.portal.quizzes.submit', $quiz) }}" x-ref="form" class="flex flex-col gap-4"
             x-data="quizTaker({ answers: @js((object) ($attempt->answers ?? [])), url: @js(route('school.portal.quizzes.answer', $quiz)), deadline: @js($deadline?->toIso8601String()) })"
-            onsubmit="return this.dataset.confirmed === '1' || confirm('Hand in now? You can’t change your answers afterwards.') ? true : false">
+            data-confirm="You can’t change your answers afterwards."
+            data-confirm-title="Hand in now?"
+            data-confirm-action="Hand in"
+            data-confirm-tone="brand">
             @csrf
             <div class="sticky top-[72px] z-10 flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-white/95 px-5 py-3 shadow-card backdrop-blur">
                 <span class="text-sm text-muted"><span x-text="answered"></span> of {{ $questions->count() }} answered</span>

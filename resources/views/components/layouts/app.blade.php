@@ -274,4 +274,5 @@
     </div>
 
     <x-flash />
+    <x-confirm-dialog />
 </x-layouts.base>

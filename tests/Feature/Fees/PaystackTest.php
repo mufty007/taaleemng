@@ -10,6 +10,7 @@ use App\Models\FeeStructure;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
+use App\Models\SchoolSetting;
 use App\Models\Term;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Http;
@@ -22,6 +23,7 @@ beforeEach(function () {
     $this->parent = $this->enrolled->guardian->user;
 
     $this->invoice = inSchool($this->school, function () {
+        SchoolSetting::store('paystack_subaccount', 'ACCT_school123');
         $term = Term::current();
         $item = FeeItem::query()->create(['name' => 'Tuition']);
         FeeStructure::query()->create(['term_id' => $term->id, 'class_level_id' => ClassLevel::query()->where('name', 'JSS 1')->value('id'), 'fee_item_id' => $item->id, 'amount' => 150_000_00]);
@@ -65,9 +67,19 @@ it('sends the parent to Paystack with a pending payment for the balance', functi
     Http::assertSent(fn (HttpRequest $request) => $request->url() === 'https://api.paystack.test/transaction/initialize'
         && $request['amount'] === 150_000_00
         && $request['email'] === 'amina@family.test'
+        && $request['subaccount'] === 'ACCT_school123'
         && $request['callback_url'] === route('school.portal.payments.callback', $this->school)
         && $request->hasHeader('Authorization', 'Bearer sk_test_secret'));
 });
+
+it('blocks online pay until the school has a payout subaccount', function () {
+    inSchool($this->school, fn () => SchoolSetting::store('paystack_subaccount', null));
+
+    $this->actingAs($this->parent)->post(route('school.portal.invoices.pay', [$this->school, $this->invoice]))
+        ->assertRedirect()
+        ->assertSessionHas('status', fn (string $status) => str_contains($status, 'payouts'));
+});
+
 
 it('confirms the payment when the parent comes back, after checking with Paystack', function () {
     $payment = ($this->startPayment)();

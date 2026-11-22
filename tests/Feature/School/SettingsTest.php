@@ -4,6 +4,7 @@ use App\Enums\SchoolRole;
 use App\Models\NumberSequence;
 use App\Models\SchoolSetting;
 use App\Support\Results\PromotionRules;
+use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
     $this->school = schoolWithStructure(['slug' => 'greenfield', 'short_code' => 'GFA']);
@@ -33,7 +34,6 @@ it('saves admissions, promotion and numbering preferences', function () {
             'admissions_open' => '1',
             'show_positions' => '1',
             'promotion_pass_mark' => '45',
-            'paystack_subaccount' => 'ACCT_test123',
             'numbering' => $patterns,
         ])
         ->assertRedirect()
@@ -43,9 +43,34 @@ it('saves admissions, promotion and numbering preferences', function () {
         expect(SchoolSetting::valueFor('admissions_open'))->toBeTrue()
             ->and(SchoolSetting::valueFor('show_positions'))->toBeTrue()
             ->and((float) SchoolSetting::valueFor('promotion_pass_mark'))->toBe(45.0)
-            ->and(SchoolSetting::valueFor('paystack_subaccount'))->toBe('ACCT_test123')
             ->and(PromotionRules::passMark())->toBe(45.0)
             ->and(NumberSequence::query()->where('key', 'admission_no')->value('pattern'))->toBe('GFA/{YYYY}/{SEQ:5}');
+    });
+});
+
+it('creates a Paystack payout subaccount from the school bank details', function () {
+    config(['services.paystack.secret_key' => 'sk_test_secret', 'services.paystack.base_url' => 'https://api.paystack.test']);
+    Http::fake([
+        'api.paystack.test/subaccount' => Http::response(['status' => true, 'data' => ['subaccount_code' => 'ACCT_school123']]),
+    ]);
+
+    $patterns = collect(config('taaleem.numbering'))->all();
+
+    $this->actingAs($this->admin)
+        ->put(route('school.settings.update', $this->school), [
+            'promotion_pass_mark' => 40,
+            'payout_bank_code' => '058',
+            'payout_account_number' => '0123456789',
+            'payout_account_name' => 'Greenfield Academy',
+            'numbering' => $patterns,
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    inSchool($this->school, function () {
+        expect(SchoolSetting::valueFor('paystack_subaccount'))->toBe('ACCT_school123')
+            ->and(SchoolSetting::valueFor('payout_bank_code'))->toBe('058')
+            ->and(SchoolSetting::valueFor('payout_account_number'))->toBe('0123456789');
     });
 });
 

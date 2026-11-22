@@ -20,7 +20,7 @@
                 <div class="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
                     @if ($readCount !== null)<span class="text-sm text-muted">Opened by {{ $readCount }} {{ \Illuminate\Support\Str::plural('person', $readCount) }}</span>@endif
                     @if ($canDelete)
-                        <form method="POST" action="{{ route('school.announcements.destroy', $announcement) }}" x-data x-on:submit="if (! confirm('Take this notice down?')) $event.preventDefault()">
+                        <form method="POST" action="{{ route('school.announcements.destroy', $announcement) }}" data-confirm="Take this notice down? Parents and staff will no longer see it." data-confirm-title="Take notice down?" data-confirm-action="Take down">
                             @csrf
                             @method('DELETE')
                             <x-button variant="ghost" size="sm" icon="trash-2">Take it down</x-button>

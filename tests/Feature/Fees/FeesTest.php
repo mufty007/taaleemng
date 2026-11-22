@@ -248,19 +248,15 @@ it('shows a parent the balance in the portal', function () {
         ->assertSee('Pay at the school bursary');
 });
 
-it('lets a student see their own fees without an online pay button', function () {
+it('keeps fees off the student portal', function () {
     ($this->issue)();
     ($this->pay)('100,000');
 
     $this->actingAs($this->student->user)->get(route('school.portal', $this->school))
         ->assertOk()
-        ->assertSee('Fees')
-        ->assertSee('Fees outstanding')
-        ->assertSee('Ask a parent or guardian')
-        ->assertDontSee('Pay ₦70,000 online');
+        ->assertDontSee('Fees outstanding')
+        ->assertDontSee('Pay at the school bursary');
 });
-
-
 
 it('edits a fee item’s name, type and what each class pays in one go', function () {
     $admin = memberOf($this->school);

@@ -53,8 +53,9 @@
     @endif
 
     <x-tabs :tabs="$ownProfile
-        ? ['results' => ['label' => 'Results', 'count' => $publishedResults->count()], 'work' => ['label' => 'My work', 'count' => $todo + $openQuizzes], 'fees' => ['label' => 'Fees', 'count' => $invoices->filter(fn ($invoice) => $invoice->status->isOpen())->count()], 'timetable' => 'Timetable', 'exams' => ['label' => 'Exams', 'count' => $examPapers->count()], 'attendance' => 'Attendance', 'subjects' => 'Subjects & teachers', 'calendar' => 'Term calendar']
+        ? ['results' => ['label' => 'Results', 'count' => $publishedResults->count()], 'work' => ['label' => 'My work', 'count' => $todo + $openQuizzes], 'timetable' => 'Timetable', 'exams' => ['label' => 'Exams', 'count' => $examPapers->count()], 'attendance' => 'Attendance', 'subjects' => 'Subjects & teachers', 'calendar' => 'Term calendar']
         : ['results' => ['label' => 'Results', 'count' => $publishedResults->count()], 'fees' => ['label' => 'Fees', 'count' => $invoices->filter(fn ($invoice) => $invoice->status->isOpen())->count()], 'attendance' => 'Attendance', 'work' => 'Homework & tests', 'timetable' => 'Timetable', 'exams' => ['label' => 'Exams', 'count' => $examPapers->count()], 'subjects' => 'Teachers', 'calendar' => 'Term calendar', 'contacts' => 'Contacts']" label="Class information" class="max-w-5xl">
+
 
     <x-tab name="exams">
         @if ($examPapers->isEmpty())
@@ -113,9 +114,12 @@
         @endif
     </x-tab>
 
-    <x-tab name="fees">
-        @include('portal._fees')
-    </x-tab>
+    @unless ($ownProfile)
+        <x-tab name="fees">
+            @include('portal._fees')
+        </x-tab>
+    @endunless
+
 
 
     <x-tab name="attendance">

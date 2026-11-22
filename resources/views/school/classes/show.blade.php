@@ -192,7 +192,7 @@
                                     </select>
                                     <noscript><x-button variant="secondary" size="sm">Save</x-button></noscript>
                                 </form>
-                                <form method="POST" action="{{ route('school.class-subjects.destroy', $classSubject) }}" x-data x-on:submit="if (! confirm('Remove {{ $classSubject->subject->name }} from {{ $classArm->displayName() }}?')) $event.preventDefault()">
+                                <form method="POST" action="{{ route('school.class-subjects.destroy', $classSubject) }}" data-confirm="Remove {{ $classSubject->subject->name }} from {{ $classArm->displayName() }}?" data-confirm-title="Remove subject?" data-confirm-action="Remove">
                                     @csrf
                                     @method('DELETE')
                                     <button type="submit" class="grid size-9 place-items-center rounded-lg text-muted hover:bg-danger-50 hover:text-danger" aria-label="Remove {{ $classSubject->subject->name }}">

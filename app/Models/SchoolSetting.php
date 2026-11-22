@@ -26,6 +26,10 @@ class SchoolSetting extends Model
             'show_positions',
             'promotion_pass_mark',
             'paystack_subaccount',
+            'payout_bank_code',
+            'payout_bank_name',
+            'payout_account_number',
+            'payout_account_name',
             'currency',
             'date_format',
         ];

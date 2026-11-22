@@ -88,6 +88,11 @@ final class PermissionCatalogue
                 'scores.enter', 'results.view', 'results.approve', 'results.publish',
                 'cbt.manage', 'finance.view', 'activity.view',
             ],
+            SchoolRole::HeadTeacher => [
+                'academics.manage', 'timetable.manage', 'attendance.take', 'attendance.view',
+                'admissions.manage', 'students.view', 'students.view-all',
+                'scores.enter', 'results.view', 'results.approve', 'cbt.manage',
+            ],
             SchoolRole::Bursar => [
                 'students.view', 'students.view-all', 'fees.manage', 'payments.record', 'finance.view',
                 'expenses.manage', 'payroll.manage',

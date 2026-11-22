@@ -83,7 +83,7 @@
                                                     x-on:click="$dispatch('edit-arm', { action: @js(route('school.classes.update', $arm)), values: @js(['title' => $arm->displayName(), 'name' => $arm->name, 'stream_id' => $arm->stream_id, 'form_teacher_id' => $arm->form_teacher_id, 'capacity' => $arm->capacity]) })">
                                                     <x-lucide-pencil class="size-[18px]" aria-hidden="true" />
                                                 </button>
-                                                <form method="POST" action="{{ route('school.classes.destroy', $arm) }}" x-data x-on:submit="if (! confirm(@js('Delete '.$arm->displayName().'? This only works if it has no students.'))) $event.preventDefault()">
+                                                <form method="POST" action="{{ route('school.classes.destroy', $arm) }}" data-confirm="{{ 'Delete '.$arm->displayName().'? This only works if it has no students.' }}" data-confirm-title="Delete class?" data-confirm-action="Delete">
                                                     @csrf
                                                     @method('DELETE')
                                                     <button type="submit" title="Delete {{ $arm->displayName() }}" aria-label="Delete {{ $arm->displayName() }}" class="grid size-9 place-items-center rounded-lg text-muted hover:bg-danger-50 hover:text-danger">

@@ -162,6 +162,7 @@ final class DemoSchoolBuilder
         [$basic, $allowances] = match ($role) {
             SchoolRole::SchoolAdmin => [450_000_00, 50_000_00],
             SchoolRole::Principal => [380_000_00, 40_000_00],
+            SchoolRole::HeadTeacher => [320_000_00, 35_000_00],
             SchoolRole::Bursar => [200_000_00, 25_000_00],
             SchoolRole::StoreKeeper => [120_000_00, 10_000_00],
             default => [$this->people->between(140, 190) * 1_000_00, $this->people->between(10, 30) * 1_000_00],

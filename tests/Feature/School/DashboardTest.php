@@ -21,7 +21,7 @@ it('greets the user and shows the school admin a setup checklist', function () {
 
     $this->actingAs($principal)->get(route('school.dashboard', $school))
         ->assertOk()
-        ->assertSee('Principal / Head Teacher')
+        ->assertSee('Principal')
         ->assertDontSee('Get your school ready');
 });
 

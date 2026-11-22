@@ -10,6 +10,13 @@
             @can('attendance.view')
                 <x-button variant="ghost" icon="bar-chart-3" :href="route('school.attendance.reports')">Reports</x-button>
                 <x-button variant="ghost" icon="briefcase" :href="route('school.attendance.staff', ['date' => $date->toDateString()])">Staff register</x-button>
+                @if ($term && ! $date->isFuture() && ! $date->isWeekend() && ! $term->isClosed())
+                    <form method="POST" action="{{ route('school.attendance.mark-remaining') }}" data-confirm="Mark every unmarked student and staff member present for {{ $date->format('l j F') }}? Already marked rows are left alone." data-confirm-title="Mark remaining present?" data-confirm-action="Mark present" data-confirm-tone="brand">
+                        @csrf
+                        <input type="hidden" name="date" value="{{ $date->toDateString() }}">
+                        <x-button variant="brand" icon="check-check">Mark remaining present</x-button>
+                    </form>
+                @endif
             @endcan
 
             <form method="GET" class="flex items-center gap-2">

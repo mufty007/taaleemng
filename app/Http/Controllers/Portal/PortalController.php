@@ -16,6 +16,7 @@ use App\Models\ExamPaper;
 use App\Models\Quiz;
 use App\Models\QuizAttempt;
 use App\Models\ResultPublication;
+use App\Models\SchoolSetting;
 use App\Models\Student;
 use App\Models\Term;
 use App\Support\Attendance\AttendanceSummary;
@@ -156,7 +157,9 @@ class PortalController extends Controller
             'invoices' => $student->invoices()->with('term.academicSession')->where('status', '!=', InvoiceStatus::Void)->latest('issued_at')->get(),
             'payments' => $student->payments()->where('status', PaymentStatus::Confirmed)->latest('paid_at')->limit(10)->get(),
             'balance' => AllocatePayments::balance($student),
-            'canPayOnline' => ! $ownProfile && app(Paystack::class)->isConfigured(),
+            'canPayOnline' => ! $ownProfile
+                && app(Paystack::class)->isConfigured()
+                && filled(SchoolSetting::valueFor('paystack_subaccount')),
             ...$this->attendanceAndWork($student, $term),
             'publishedResults' => collect($publishedResults)->sortByDesc(fn (array $result) => $result['term']->starts_on)->values(),
         ]);

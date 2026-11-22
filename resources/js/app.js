@@ -6,6 +6,7 @@ import { initMotion } from './motion';
 import { startNavigation } from './navigation';
 import attendance from './components/attendance';
 import broadsheet from './components/broadsheet';
+import confirmDialog, { confirmSubmit } from './components/confirm';
 import { quizBuilder, quizTaker } from './components/quiz';
 import importProgress from './components/import-progress';
 import remarks from './components/remarks';
@@ -19,11 +20,14 @@ Alpine.plugin(focus);
 Alpine.data('attendanceRegister', attendance);
 Alpine.data('timetableEditor', timetableEditor);
 Alpine.data('broadsheet', broadsheet);
+Alpine.data('confirmDialog', confirmDialog);
 Alpine.data('quizBuilder', quizBuilder);
 Alpine.data('quizTaker', quizTaker);
 Alpine.data('importProgress', importProgress);
 Alpine.data('remarksBook', remarks);
 Alpine.data('scorebook', scorebook);
+
+document.addEventListener('submit', confirmSubmit, true);
 
 /**
  * App shell: mobile drawer and the desktop sidebar rail (remembered per browser).

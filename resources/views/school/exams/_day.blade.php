@@ -32,7 +32,7 @@
                         <td class="py-2 pl-3">
                             <div class="flex justify-end gap-0.5">
                                 <button type="button" class="grid size-8 place-items-center rounded-lg text-muted hover:bg-chip hover:text-ink" aria-label="Edit {{ $paper->subject->name }} for {{ $paper->classLevel->name }}" x-data x-on:click="$dispatch('edit-paper', { action: @js(route('school.exams.update', $paper)), values: @js(['class_level_id' => (string) $paper->class_level_id, 'subject_id' => (string) $paper->subject_id, 'date' => $paper->starts_at->toDateString(), 'time' => $paper->starts_at->format('H:i'), 'duration_minutes' => $paper->duration_minutes, 'venue' => $paper->venue, 'invigilator_id' => (string) ($paper->invigilator_id ?? ''), 'notes' => $paper->notes]) })"><x-lucide-pencil class="size-3.5" aria-hidden="true" /></button>
-                                <form method="POST" action="{{ route('school.exams.destroy', $paper) }}" x-data x-on:submit="if (! confirm('Remove this paper?')) $event.preventDefault()">
+                                <form method="POST" action="{{ route('school.exams.destroy', $paper) }}" data-confirm="Remove this paper from the exam timetable?" data-confirm-title="Remove paper?" data-confirm-action="Remove">
                                     @csrf
                                     @method('DELETE')
                                     <button type="submit" class="grid size-8 place-items-center rounded-lg text-muted hover:bg-danger-50 hover:text-danger" aria-label="Remove {{ $paper->subject->name }} for {{ $paper->classLevel->name }}"><x-lucide-trash-2 class="size-3.5" aria-hidden="true" /></button>

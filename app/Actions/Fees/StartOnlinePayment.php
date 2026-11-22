@@ -16,6 +16,7 @@ use Illuminate\Validation\ValidationException;
 /**
  * A parent pays an invoice online: record a pending payment and get the
  * Paystack checkout page to send them to. Nothing counts until Paystack confirms.
+ * Settlements use the school's Paystack subaccount under the platform account.
  */
 class StartOnlinePayment
 {
@@ -27,6 +28,16 @@ class StartOnlinePayment
 
         if ($amount <= 0) {
             throw ValidationException::withMessages(['invoice' => 'This invoice is already paid.']);
+        }
+
+        if (! $this->paystack->isConfigured()) {
+            throw ValidationException::withMessages(['invoice' => 'Online payments are not available right now. Pay at the bursary instead.']);
+        }
+
+        $subaccount = SchoolSetting::valueFor('paystack_subaccount');
+
+        if (blank($subaccount)) {
+            throw ValidationException::withMessages(['invoice' => 'This school has not finished setting up online payouts yet. Pay at the bursary, or ask the school office.']);
         }
 
         $school = $this->currentSchool->getOrFail();
@@ -51,7 +62,7 @@ class StartOnlinePayment
                 'student' => $invoice->student->fullName(),
                 'invoice_no' => $invoice->invoice_no,
             ],
-            subaccount: SchoolSetting::valueFor('paystack_subaccount'),
+            subaccount: (string) $subaccount,
         );
 
         return $checkout['authorization_url'];

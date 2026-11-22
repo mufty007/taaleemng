@@ -34,7 +34,7 @@
                             <td class="px-5 py-3">
                                 <div class="flex justify-end gap-1">
                                     <x-button variant="ghost" size="sm" icon="pencil" type="button" x-data x-on:click="$dispatch('edit-period', { action: {{ \Illuminate\Support\Js::from(route('school.timetable.periods.update', $period)) }}, values: {{ \Illuminate\Support\Js::from(['name' => $period->name, 'starts_at' => substr($period->starts_at, 0, 5), 'ends_at' => substr($period->ends_at, 0, 5), 'kind' => $period->kind->value]) }} })">Edit</x-button>
-                                    <form method="POST" action="{{ route('school.timetable.periods.destroy', $period) }}" x-data x-on:submit="if (! confirm(@js('Remove '.$period->name.'? Lessons in it are removed from every class.'))) $event.preventDefault()">
+                                    <form method="POST" action="{{ route('school.timetable.periods.destroy', $period) }}" data-confirm="{{ 'Remove '.$period->name.'? Lessons in it are removed from every class.' }}" data-confirm-title="Remove period?" data-confirm-action="Remove">
                                         @csrf
                                         @method('DELETE')
                                         <x-button variant="ghost" size="sm" icon="trash-2">Remove</x-button>

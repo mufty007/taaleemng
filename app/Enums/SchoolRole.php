@@ -10,6 +10,7 @@ enum SchoolRole: string
 {
     case SchoolAdmin = 'school-admin';
     case Principal = 'principal';
+    case HeadTeacher = 'head-teacher';
     case Bursar = 'bursar';
     case Teacher = 'teacher';
     case StoreKeeper = 'store-keeper';
@@ -20,7 +21,8 @@ enum SchoolRole: string
     {
         return match ($this) {
             self::SchoolAdmin => 'School Admin',
-            self::Principal => 'Principal / Head Teacher',
+            self::Principal => 'Principal',
+            self::HeadTeacher => 'Head Teacher',
             self::Bursar => 'Bursar / Accountant',
             self::Teacher => 'Teacher',
             self::StoreKeeper => 'Store Keeper / Librarian',

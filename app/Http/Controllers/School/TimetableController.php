@@ -126,6 +126,29 @@ class TimetableController extends Controller
             : 'Nothing to place: every period already has a lesson, or the teachers are busy elsewhere.');
     }
 
+    public function autofillAll(AutofillTimetable $autofill): RedirectResponse
+    {
+        $placed = 0;
+        $empty = 0;
+        $classes = 0;
+
+        foreach ($this->arms() as $arm) {
+            $result = $autofill->handle($arm);
+            $placed += $result['placed'];
+            $empty += $result['empty'];
+
+            if ($result['placed'] > 0) {
+                $classes++;
+            }
+        }
+
+        activity('timetable')->log("filled empty lessons across {$classes} classes");
+
+        return to_route('school.timetable.index')->with('status', $placed
+            ? "Placed {$placed} lessons across {$classes} classes.".($empty ? " {$empty} periods are still free." : '')
+            : 'Nothing to place: every period already has a lesson, or the teachers are busy elsewhere.');
+    }
+
     public function clear(ClassArm $classArm): RedirectResponse
     {
         TimetableEntry::query()->where('class_arm_id', $classArm->id)->delete();

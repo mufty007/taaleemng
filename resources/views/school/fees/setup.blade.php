@@ -82,7 +82,7 @@
                         </div>
                     </form>
                     <div class="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-4">
-                        <form method="POST" action="{{ route('school.fees.schedule.copy') }}" class="flex flex-wrap items-center gap-2">
+                        <form method="POST" action="{{ route('school.fees.schedule.copy') }}" class="flex flex-wrap items-center gap-2" data-confirm="Replace this term’s amounts with the ones from the chosen term?" data-confirm-title="Copy fee amounts?" data-confirm-action="Copy" data-confirm-tone="brand">
                             @csrf
                             <input type="hidden" name="term_id" value="{{ $term->id }}">
                             <label for="from_term_id" class="text-sm text-muted">Copy amounts from</label>
@@ -92,7 +92,7 @@
                                     <option value="{{ $id }}">{{ $label }}</option>
                                 @endforeach
                             </select>
-                            <x-button variant="secondary" size="sm" icon="copy" onclick="return confirm('Replace this term’s amounts with the ones from the chosen term?')">Copy</x-button>
+                            <x-button variant="secondary" size="sm" icon="copy">Copy</x-button>
                         </form>
                         <x-button variant="brand" icon="check" form="schedule-form">Save {{ $term->name }} fees</x-button>
                     </div>
@@ -147,7 +147,7 @@
                                             </form>
                                             <x-button variant="secondary" size="sm" icon="pencil" type="button" x-data x-on:click="$dispatch('edit-item', { action: {{ \Illuminate\Support\Js::from(route('school.fees.items.update', $item)) }}, values: {{ \Illuminate\Support\Js::from($editValues) }} })">Edit</x-button>
                                             @unless ($itemsInUse->has($item->id))
-                                                <form method="POST" action="{{ route('school.fees.items.destroy', $item) }}" onsubmit="return confirm('Delete {{ $item->name }}?')">
+                                                <form method="POST" action="{{ route('school.fees.items.destroy', $item) }}" data-confirm="Delete {{ $item->name }}?" data-confirm-title="Delete fee item?" data-confirm-action="Delete">
                                                     @csrf
                                                     @method('DELETE')
                                                     <x-button variant="ghost" size="sm" icon="trash-2">Delete</x-button>

@@ -25,3 +25,20 @@ it('keeps portal permissions away from staff admins and finance away from teache
         ->and(PermissionCatalogue::forRole(SchoolRole::Teacher))->not->toContain('fees.manage')
         ->and(PermissionCatalogue::forRole(SchoolRole::Parent))->toBe(['portal.wards']);
 });
+
+it('keeps head teachers below principals and school admins', function () {
+    $head = PermissionCatalogue::forRole(SchoolRole::HeadTeacher);
+    $principal = PermissionCatalogue::forRole(SchoolRole::Principal);
+
+    expect($head)->not->toContain('finance.view')
+        ->and($head)->not->toContain('results.publish')
+        ->and($head)->not->toContain('students.manage')
+        ->and($head)->not->toContain('school.manage')
+        ->and($head)->not->toContain('users.manage')
+        ->and($principal)->toContain('finance.view')
+        ->and($principal)->toContain('results.publish')
+        ->and($principal)->not->toContain('school.manage')
+        ->and($principal)->not->toContain('users.manage')
+        ->and(SchoolRole::HeadTeacher->label())->toBe('Head Teacher')
+        ->and(SchoolRole::Principal->label())->toBe('Principal');
+});

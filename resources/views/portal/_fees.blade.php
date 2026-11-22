@@ -10,8 +10,9 @@
             <div @class(['text-3xl font-bold tracking-[-0.02em]', 'text-danger' => $balance > 0, 'text-naija-700' => $balance <= 0])>{{ $balance === 0 ? 'All paid' : Money::format(abs($balance)) }}</div>
         </div>
         @if ($balance > 0 && ! $canPayOnline)
-            <p class="m-0 max-w-sm text-sm text-muted">{{ ($ownProfile ?? false) ? 'Ask a parent or guardian to pay at the bursary or online from their portal.' : 'Pay at the school bursary or by bank transfer, then keep your receipt.' }}</p>
+            <p class="m-0 max-w-sm text-sm text-muted">Pay at the school bursary or by bank transfer, then keep your receipt.</p>
         @endif
+
 
     </div>
 

@@ -33,7 +33,7 @@
             <div class="flex flex-wrap gap-2">
                 <x-button variant="secondary" icon="pencil" :href="route('school.students.edit', $student)">Edit</x-button>
                 @if ($student->user)
-                    <form method="POST" action="{{ route('school.students.password', $student) }}" x-data x-on:submit="if (! confirm('Give {{ $student->first_name }} a new password? The old one will stop working.')) $event.preventDefault()">
+                    <form method="POST" action="{{ route('school.students.password', $student) }}" data-confirm="Give {{ $student->first_name }} a new password? The old one will stop working." data-confirm-title="Reset password?" data-confirm-action="Reset" data-confirm-tone="brand">
                         @csrf
                         <x-button variant="ghost" icon="key-round">Reset login</x-button>
                     </form>

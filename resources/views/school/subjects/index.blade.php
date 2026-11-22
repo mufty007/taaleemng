@@ -66,7 +66,7 @@
                                                 x-on:click="$dispatch('edit-subject', { action: @js(route('school.subjects.update', $subject)), values: @js(['title' => $subject->name, 'name' => $subject->name, 'code' => $subject->code, 'category' => $subject->category->value]) })">
                                                 <x-lucide-pencil class="size-[18px]" aria-hidden="true" />
                                             </button>
-                                            <form method="POST" action="{{ route('school.subjects.destroy', $subject) }}" x-data x-on:submit="if (! confirm(@js('Delete '.$subject->name.'?'))) $event.preventDefault()">
+                                            <form method="POST" action="{{ route('school.subjects.destroy', $subject) }}" data-confirm="{{ 'Delete '.$subject->name.'?' }}" data-confirm-title="Delete subject?" data-confirm-action="Delete">
                                                 @csrf
                                                 @method('DELETE')
                                                 <button type="submit" title="Delete {{ $subject->name }}" aria-label="Delete {{ $subject->name }}" class="grid size-9 place-items-center rounded-lg text-muted hover:bg-danger-50 hover:text-danger">

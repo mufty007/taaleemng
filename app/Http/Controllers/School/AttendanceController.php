@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\School;
 
+use App\Actions\Attendance\MarkRemainingPresent;
 use App\Enums\AttendanceStatus;
 use App\Http\Controllers\Controller;
 use App\Models\AcademicSession;
@@ -85,6 +86,28 @@ class AttendanceController extends Controller
             'week' => collect(range(0, 4))->map(fn (int $offset) => $monday->copy()->addDays($offset)),
             'marked' => $marked,
         ]);
+    }
+
+    public function markRemaining(Request $request, MarkRemainingPresent $mark): RedirectResponse
+    {
+        abort_unless($request->user()->can('attendance.view'), 403);
+
+        $date = ClassRegister::schoolDay((string) $request->input('date', $request->query('date')));
+        $result = $mark->handle($date, $request->user(), includeStaff: true);
+
+        activity('attendance')->log("marked remaining present for {$date->toDateString()}");
+
+        $parts = [];
+        if ($result['students'] > 0) {
+            $parts[] = "{$result['students']} students across {$result['classes']} classes";
+        }
+        if ($result['staff'] > 0) {
+            $parts[] = "{$result['staff']} staff";
+        }
+
+        return to_route('school.attendance.index', ['date' => $date->toDateString()])->with('status', $parts === []
+            ? 'Everyone already marked for that day.'
+            : 'Marked present: '.implode(' and ', $parts).'.');
     }
 
     /**

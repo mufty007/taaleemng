@@ -1,11 +1,18 @@
 <x-layouts.app title="Timetable">
     <x-page-header kicker="Academics" title="Timetable" :description="$canManage ? 'Build each class’s week. Pick a subject for each period, or let Ta’aleem fill the week for you. A teacher is never put in two classes at once.' : 'Each class’s week of lessons.'">
         <x-slot:actions>
+            @if ($canManage && $periods->isNotEmpty() && $arms->isNotEmpty())
+                <form method="POST" action="{{ route('school.timetable.autofill-all') }}" data-confirm="Fill empty lesson periods for every class? Existing lessons stay; teachers are never double-booked." data-confirm-title="Fill all classes?" data-confirm-action="Fill all" data-confirm-tone="brand">
+                    @csrf
+                    <x-button variant="brand" icon="wand-sparkles">Fill all classes</x-button>
+                </form>
+            @endif
             @if ($arm)
                 <x-button data-native variant="secondary" icon="printer" :href="route('school.timetable.print', ['kind' => 'class', 'ulid' => $arm->ulid])">Print</x-button>
             @endif
         </x-slot:actions>
     </x-page-header>
+
 
     @include('school.timetable._tabs', ['current' => 'classes'])
 
@@ -38,7 +45,7 @@
                         @csrf
                         <x-button variant="brand" icon="wand-sparkles">Fill the empty periods</x-button>
                     </form>
-                    <form method="POST" action="{{ route('school.timetable.clear', $arm) }}" x-data x-on:submit="if (! confirm(@js('Clear every lesson from '.$arm->displayName().'’s timetable?'))) $event.preventDefault()">
+                    <form method="POST" action="{{ route('school.timetable.clear', $arm) }}" data-confirm="{{ 'Clear every lesson from '.$arm->displayName().'’s timetable?' }}" data-confirm-title="Clear timetable?" data-confirm-action="Clear">
                         @csrf
                         <x-button variant="ghost" icon="eraser">Clear</x-button>
                     </form>

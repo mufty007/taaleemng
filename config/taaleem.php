@@ -35,6 +35,10 @@ return [
         'promotion_pass_mark' => 40,
         'admissions_open' => true,
         'paystack_subaccount' => null,
+        'payout_bank_code' => null,
+        'payout_bank_name' => null,
+        'payout_account_number' => null,
+        'payout_account_name' => null,
     ],
 
     /*
