@@ -1,12 +1,14 @@
-{{-- Bursar: the money first. --}}
-<div class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+{{-- Bursar: money work on the left, actions and notices on the right. --}}
+<div class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
     <div class="flex min-w-0 flex-col gap-6">
         @if ($fees)
             @include('school.dashboard._fees')
         @endif
         @include('school.dashboard._payments')
+        @include('school.dashboard._cashflow')
+        @include('school.dashboard._activity')
     </div>
-    <div class="flex min-w-0 flex-col gap-6">
+    <aside class="flex min-w-0 flex-col gap-6">
         <x-card>
             <h2 class="m-0 text-base font-semibold">Quick actions</h2>
             <div class="mt-3 grid grid-cols-1 gap-2">
@@ -18,9 +20,7 @@
                 @endcan
             </div>
         </x-card>
-        @include('school.dashboard._cashflow')
         @include('school.announcements._latest')
         @include('school.dashboard._term')
-        @include('school.dashboard._activity')
-    </div>
+    </aside>
 </div>

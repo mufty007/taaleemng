@@ -1,5 +1,5 @@
-{{-- A teacher: register, marking and scores first, then what is coming up and their classes. --}}
-<div class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+{{-- A teacher: marking and scores on the left, day plan and notices on the right. --}}
+<div class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
     <div class="flex min-w-0 flex-col gap-6">
         @foreach ($registers as $register)
             @php($counts = $register->counts())
@@ -68,9 +68,13 @@
                 </ul>
             </x-card>
         @endif
+
+        @if ($myClasses->isNotEmpty() || $formClasses->isNotEmpty())
+            @include('school.dashboard._my-classes')
+        @endif
     </div>
 
-    <div class="flex min-w-0 flex-col gap-6">
+    <aside class="flex min-w-0 flex-col gap-6">
         <x-card :padding="false">
             <div class="flex items-center justify-between border-b border-line px-5 py-4">
                 <h2 class="m-0 text-base font-semibold">Today’s lessons</h2>
@@ -122,11 +126,6 @@
         </x-card>
 
         @include('school.announcements._latest')
-
-        @if ($myClasses->isNotEmpty() || $formClasses->isNotEmpty())
-            @include('school.dashboard._my-classes')
-        @endif
-
         @include('school.dashboard._term')
-    </div>
+    </aside>
 </div>

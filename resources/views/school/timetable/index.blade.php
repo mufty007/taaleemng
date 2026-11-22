@@ -2,6 +2,10 @@
     <x-page-header kicker="Academics" title="Timetable" :description="$canManage ? 'Build each class’s week. Pick a subject for each period, or let Ta’aleem fill the week for you. A teacher is never put in two classes at once.' : 'Each class’s week of lessons.'">
         <x-slot:actions>
             @if ($canManage && $periods->isNotEmpty() && $arms->isNotEmpty())
+                <form method="POST" action="{{ route('school.timetable.rebuild-all') }}" data-confirm="This clears every class’s timetable, including lessons placed by hand, and builds them all again. Teachers are never double-booked." data-confirm-title="Rebuild every class?" data-confirm-action="Rebuild all">
+                    @csrf
+                    <x-button variant="secondary" icon="refresh-cw">Rebuild all</x-button>
+                </form>
                 <form method="POST" action="{{ route('school.timetable.autofill-all') }}" data-confirm="Fill empty lesson periods for every class? Existing lessons stay; teachers are never double-booked." data-confirm-title="Fill all classes?" data-confirm-action="Fill all" data-confirm-tone="brand">
                     @csrf
                     <x-button variant="brand" icon="wand-sparkles">Fill all classes</x-button>

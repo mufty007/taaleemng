@@ -23,6 +23,7 @@ use App\Enums\InventoryCategory;
 use App\Enums\PaymentMethod;
 use App\Enums\PayrollRunStatus;
 use App\Enums\SchoolRole;
+use App\Enums\SpecialExamKind;
 use App\Enums\StockMovementType;
 use App\Enums\TermStatus;
 use App\Models\AcademicSession;
@@ -43,9 +44,11 @@ use App\Models\Period;
 use App\Models\ReportTrait;
 use App\Models\ResultPublication;
 use App\Models\School;
+use App\Models\SpecialExam;
 use App\Models\Staff;
 use App\Models\Stream;
 use App\Models\Student;
+use App\Models\Subject;
 use App\Models\Term;
 use App\Support\Finance\CashflowPeriod;
 use App\Support\Results\CommentBank;
@@ -105,6 +108,15 @@ final class DemoSchoolBuilder
                 app(AddClassArm::class)->handle($level, $armName);
             }
         }
+
+        // Seats per classroom, so the enrolment report can show how full each class is.
+        ClassArm::query()->with('level')->get()->each(fn (ClassArm $arm) => $arm->update([
+            'capacity' => match ($arm->level->section) {
+                ClassSection::Nursery => 15,
+                ClassSection::Primary => 20,
+                default => 25,
+            },
+        ]));
     }
 
     /**
@@ -1024,24 +1036,29 @@ final class DemoSchoolBuilder
     }
 
     /**
-     * Uniforms, books and stationery in the store, with some low-stock lines and a few sales.
+     * Uniforms, books and stationery in the store: opening stock before resumption, then a
+     * term of sales to students, books issued to classes and a mid-term restock, leaving
+     * some lines low or out.
      */
     public function inventory(?string $storeKeeper = 'store'): void
     {
         $recorder = $this->staffMember($storeKeeper)->user;
         $move = app(RecordStockMovement::class);
+        $term = $this->currentTerm();
+        $opened = $term->starts_on->copy()->subWeek()->setTime(10, 0);
 
         $catalogue = [
             ['Senior school shirt (white)', 'UNI-SHIRT-W', InventoryCategory::Uniforms, 'piece', 4_500_00, 80, 15],
-            ['Senior school shirt (blue)', 'UNI-SHIRT-B', InventoryCategory::Uniforms, 'piece', 4_500_00, 12, 15],
+            ['Senior school shirt (blue)', 'UNI-SHIRT-B', InventoryCategory::Uniforms, 'piece', 4_500_00, 30, 15],
             ['House T-shirt', 'UNI-HOUSE', InventoryCategory::Uniforms, 'piece', 2_500_00, 45, 20],
             ['New General Mathematics JSS 1', 'BK-MTH-J1', InventoryCategory::Textbooks, 'piece', 3_200_00, 60, 10],
-            ['New General Mathematics JSS 2', 'BK-MTH-J2', InventoryCategory::Textbooks, 'piece', 3_400_00, 8, 10],
+            ['New General Mathematics JSS 2', 'BK-MTH-J2', InventoryCategory::Textbooks, 'piece', 3_400_00, 20, 10],
             ['Comprehensive English JSS 2', 'BK-ENG-J2', InventoryCategory::Textbooks, 'piece', 2_800_00, 35, 10],
-            ['Exercise book (60 leaves)', 'STN-EX-60', InventoryCategory::Stationery, 'piece', 350_00, 200, 40],
-            ['Graph book', 'STN-GRAPH', InventoryCategory::Stationery, 'piece', 450_00, 3, 20],
+            ['Exercise book (60 leaves)', 'STN-EX-60', InventoryCategory::Stationery, 'piece', 350_00, 400, 80],
+            ['Graph book', 'STN-GRAPH', InventoryCategory::Stationery, 'piece', 450_00, 40, 20],
             ['Lab coat', 'LAB-COAT', InventoryCategory::Lab, 'piece', 6_500_00, 18, 5],
             ['Football (size 5)', 'SPT-BALL', InventoryCategory::Sports, 'piece', 8_000_00, 6, 4],
+            ['Chalk (white, box of 100)', 'STN-CHALK', InventoryCategory::Stationery, 'box', 1_200_00, 0, 10],
         ];
 
         foreach ($catalogue as [$name, $sku, $category, $unit, $cost, $qty, $reorder]) {
@@ -1056,36 +1073,71 @@ final class DemoSchoolBuilder
                 'is_active' => true,
             ]);
 
-            $move->handle($item, [
-                'type' => StockMovementType::Receive->value,
-                'quantity' => $qty,
-                'unit_cost' => $cost,
-                'note' => 'Opening stock for the term',
-                'moved_at' => now()->subWeeks(3),
-            ], $recorder);
+            if ($qty > 0) {
+                $move->handle($item, [
+                    'type' => StockMovementType::Receive->value,
+                    'quantity' => $qty,
+                    'unit_cost' => $cost,
+                    'note' => 'Opening stock for the term',
+                    'moved_at' => $opened,
+                ], $recorder);
+            }
         }
 
-        $shirt = InventoryItem::query()->where('sku', 'UNI-SHIRT-W')->first();
-        $book = InventoryItem::query()->where('sku', 'BK-MTH-J2')->first();
-        $students = Student::query()->orderBy('id')->limit(4)->get();
+        $items = InventoryItem::query()->get()->keyBy('sku');
+        $studentIds = Student::query()->whereHas('currentEnrolment')->orderBy('id')->pluck('id')->all();
+        $arms = ClassArm::query()->with('level')->get()->map(fn (ClassArm $arm) => $arm->displayName())->all();
 
-        if ($shirt && $students->isNotEmpty()) {
-            $move->handle($shirt, [
-                'type' => StockMovementType::Sale->value,
-                'quantity' => 1,
-                'student_id' => $students[0]->id,
-                'note' => 'Sold at the store',
-                'moved_at' => now()->subDays(5),
-            ], $recorder);
-        }
+        // Takes stock out only when there is enough, the way the store keeper would.
+        $out = function (string $sku, StockMovementType $type, int $quantity, Carbon $at, string $note, ?int $studentId = null) use ($items, $move, $recorder): void {
+            $item = $items[$sku]->refresh();
 
-        if ($book && $students->count() > 1) {
-            $move->handle($book, [
-                'type' => StockMovementType::Issue->value,
-                'quantity' => 2,
-                'note' => 'Issued to JSS 2A maths',
-                'moved_at' => now()->subDays(2),
-            ], $recorder);
+            if ($at->isFuture() || $item->quantity_on_hand < $quantity) {
+                return;
+            }
+
+            $move->handle($item, ['type' => $type->value, 'quantity' => $quantity, 'note' => $note, 'student_id' => $studentId, 'moved_at' => $at], $recorder);
+        };
+
+        // Mid-term restock of the fastest movers.
+        $restock = ($term->mid_term_starts_on ?? $term->starts_on->copy()->addWeeks(6))->copy()->setTime(11, 0);
+        $restocked = false;
+
+        for ($week = $term->starts_on->copy()->startOfWeek(); $week->lte(today()); $week->addWeek()) {
+            $day = fn () => $week->copy()->addDays($this->people->between(0, 4))->setTime($this->people->between(8, 14), $this->people->pick([0, 15, 30, 45]));
+
+            if (! $restocked && $restock->isPast() && $week->gte($restock->copy()->startOfWeek())) {
+                foreach (['STN-EX-60' => 300, 'UNI-SHIRT-W' => 40] as $sku => $quantity) {
+                    $move->handle($items[$sku]->refresh(), [
+                        'type' => StockMovementType::Receive->value,
+                        'quantity' => $quantity,
+                        'unit_cost' => $items[$sku]->unit_cost,
+                        'note' => 'Mid-term restock',
+                        'moved_at' => $restock,
+                    ], $recorder);
+                }
+
+                $restocked = true;
+            }
+
+            // Parents buy uniforms and books at the store, most of them in the first weeks of term.
+            $sales = $week->lt($term->starts_on->copy()->addWeeks(3)) ? $this->people->between(6, 10) : $this->people->between(1, 4);
+
+            for ($sale = 0; $sale < $sales && $studentIds !== []; $sale++) {
+                $sku = $this->people->pick(['UNI-SHIRT-W', 'UNI-SHIRT-W', 'UNI-SHIRT-B', 'UNI-HOUSE', 'BK-MTH-J1', 'BK-MTH-J2', 'BK-ENG-J2']);
+                $out($sku, StockMovementType::Sale, $this->people->between(1, 2), $day(), 'Sold at the store', $this->people->pick($studentIds));
+            }
+
+            // Exercise books go out to a class most weeks; graph books and chalk now and then.
+            $out('STN-EX-60', StockMovementType::Issue, $this->people->between(15, 35), $day(), 'Issued to '.$this->people->pick($arms));
+
+            if ($this->people->chance(40)) {
+                $out('STN-GRAPH', StockMovementType::Issue, $this->people->between(5, 10), $day(), 'Issued to '.$this->people->pick($arms).' for mathematics');
+            }
+
+            if ($this->people->chance(25)) {
+                $out('LAB-COAT', StockMovementType::Issue, $this->people->between(1, 3), $day(), 'Issued to the chemistry lab');
+            }
         }
     }
 
@@ -1111,5 +1163,86 @@ final class DemoSchoolBuilder
             'status' => PayrollRunStatus::Paid,
             'paid_at' => $month->copy()->endOfMonth()->setTime(14, 0),
         ]);
+    }
+
+    /**
+     * Mock and practice exams for the exit classes: a published WAEC mock and BECE practice,
+     * a JAMB practice still being marked, and a Common Entrance practice with one paper in.
+     */
+    public function specialExams(?string $setBy = 'principal'): void
+    {
+        $session = AcademicSession::current();
+
+        if ($session === null) {
+            return;
+        }
+
+        $user = $this->staffMember($setBy)->user;
+        $subjects = Subject::query()->pluck('id', 'name');
+
+        $exams = [
+            ['SS 3 WAEC mock', SpecialExamKind::Waec, 'SSS 3', ['English Language', 'Mathematics', 'Biology', 'Chemistry', 'Physics', 'Economics', 'Civic Education'], 21, true, 1.0],
+            ['SS 3 JAMB (UTME) practice', SpecialExamKind::Jamb, 'SSS 3', ['English Language', 'Mathematics', 'Physics', 'Chemistry'], 6, false, 0.6],
+            ['JSS 3 BECE practice', SpecialExamKind::Bece, 'JSS 3', ['English Language', 'Mathematics', 'Basic Science', 'Social Studies', 'Business Studies', 'Civic Education'], 14, true, 1.0],
+            ['Primary 6 Common Entrance practice', SpecialExamKind::CommonEntrance, 'Primary 6', ['English Language', 'Mathematics', 'Quantitative Reasoning', 'Verbal Reasoning'], 3, false, 0.25],
+        ];
+
+        foreach ($exams as [$title, $kind, $levelName, $paperNames, $daysAgo, $published, $marked]) {
+            $enrolments = Enrolment::query()
+                ->where('academic_session_id', $session->id)
+                ->whereHas('classArm.level', fn ($query) => $query->where('name', $levelName))
+                ->where('status', '!=', EnrolmentStatus::Withdrawn)
+                ->get(['student_id', 'class_arm_id']);
+            $papers = array_values(array_filter($paperNames, fn (string $name) => isset($subjects[$name])));
+
+            if ($enrolments->isEmpty() || $papers === []) {
+                continue;
+            }
+
+            $heldOn = today()->subDays($daysAgo);
+            $exam = SpecialExam::query()->create([
+                'academic_session_id' => $session->id,
+                'title' => $title,
+                'kind' => $kind,
+                'held_on' => $heldOn,
+                'pass_mark' => 50,
+                'published_at' => $published ? $heldOn->copy()->addDays(5)->setTime(16, 0) : null,
+                'created_by' => $user->id,
+            ]);
+
+            $paperModels = collect($papers)->map(fn (string $name, int $index) => $exam->papers()->create([
+                'subject_id' => $subjects[$name],
+                'name' => $name,
+                'max_score' => 100,
+                'position' => $index + 1,
+            ]));
+
+            // Papers are marked in order; a JAMB practice still being marked has only the first few in.
+            $markedPapers = $paperModels->take(max(1, (int) round($paperModels->count() * $marked)));
+            $rows = [];
+
+            foreach ($enrolments as $enrolment) {
+                $candidate = $exam->candidates()->create(['student_id' => $enrolment->student_id, 'class_arm_id' => $enrolment->class_arm_id]);
+                $ability = $this->people->between(35, 85);
+
+                foreach ($markedPapers as $paper) {
+                    if ($this->people->chance(4)) {
+                        continue; // absent for this paper
+                    }
+
+                    $rows[] = [
+                        'school_id' => $this->school->id,
+                        'special_exam_candidate_id' => $candidate->id,
+                        'special_exam_paper_id' => $paper->id,
+                        'score' => max(0, min(100, $ability + $this->people->between(-18, 15))),
+                        'entered_by' => $user->id,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
+                }
+            }
+
+            DB::table('special_exam_scores')->insert($rows);
+        }
     }
 }

@@ -17,9 +17,11 @@ use App\Models\Quiz;
 use App\Models\QuizAttempt;
 use App\Models\ResultPublication;
 use App\Models\SchoolSetting;
+use App\Models\SpecialExam;
 use App\Models\Student;
 use App\Models\Term;
 use App\Support\Attendance\AttendanceSummary;
+use App\Support\Exams\SpecialExamResults;
 use App\Support\Payments\Paystack;
 use App\Support\Results\ResultCalculator;
 use App\Support\Timetable\Timetable;
@@ -31,6 +33,8 @@ use Illuminate\Support\Facades\Gate;
 /**
  * The parent and student side of a school: a parent sees their children,
  * a student sees their own class, subjects and teachers.
+ *
+ * @phpstan-import-type CandidateResult from SpecialExamResults
  */
 class PortalController extends Controller
 {
@@ -79,7 +83,13 @@ class PortalController extends Controller
     {
         $user = $request->user();
 
-        return Announcement::query()->visibleTo($user)->with(['reads' => fn ($query) => $query->where('user_id', $user->id)])->noticeBoardOrder()->limit(3)->get();
+        return Announcement::query()
+            ->visibleTo($user)
+            ->whereDoesntHave('reads', fn ($query) => $query->where('user_id', $user->id))
+            ->with(['reads' => fn ($query) => $query->where('user_id', $user->id)])
+            ->noticeBoardOrder()
+            ->limit(5)
+            ->get();
     }
 
     /**
@@ -162,6 +172,34 @@ class PortalController extends Controller
                 && filled(SchoolSetting::valueFor('paystack_subaccount')),
             ...$this->attendanceAndWork($student, $term),
             'publishedResults' => collect($publishedResults)->sortByDesc(fn (array $result) => $result['term']->starts_on)->values(),
+            'specialExams' => $this->specialExamResults($student),
         ]);
+    }
+
+    /**
+     * Mock and practice exams the student sat, once the school has published them.
+     *
+     * @return Collection<int, array{exam: SpecialExam, results: SpecialExamResults, row: CandidateResult}>
+     */
+    private function specialExamResults(Student $student): Collection
+    {
+        $exams = SpecialExam::query()
+            ->whereNotNull('published_at')
+            ->whereHas('candidates', fn ($query) => $query->where('student_id', $student->id))
+            ->latest('held_on')
+            ->get();
+
+        $sat = [];
+
+        foreach ($exams as $exam) {
+            $results = SpecialExamResults::for($exam);
+            $row = $results->forStudent($student->id);
+
+            if ($row !== null && $row['sat'] > 0) {
+                $sat[] = ['exam' => $exam, 'results' => $results, 'row' => $row];
+            }
+        }
+
+        return collect($sat);
     }
 }

@@ -1,5 +1,5 @@
-{{-- Admin and principal: today's registers, money, results, admissions, then the rest. --}}
-<div class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+{{-- Admin and principal: work on the left, notices and glance on the right. --}}
+<div class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
     <div class="flex min-w-0 flex-col gap-6">
         @if ($today)
             <x-card :padding="false">
@@ -54,6 +54,8 @@
 
         @if ($fees)
             @include('school.dashboard._fees')
+            @include('school.dashboard._cashflow')
+            @include('school.dashboard._payments')
         @endif
 
         @if ($results)
@@ -91,9 +93,11 @@
         @if ($myClasses->isNotEmpty() || $formClasses->isNotEmpty())
             @include('school.dashboard._my-classes')
         @endif
+
+        @include('school.dashboard._activity')
     </div>
 
-    <div class="flex min-w-0 flex-col gap-6">
+    <aside class="flex min-w-0 flex-col gap-6">
         @include('school.announcements._latest')
         @include('school.dashboard._term')
 
@@ -114,9 +118,6 @@
             </x-card>
         @endif
 
-        @include('school.dashboard._cashflow')
-        @include('school.dashboard._payments')
-
         <x-card>
             <h2 class="m-0 text-base font-semibold">School at a glance</h2>
             <dl class="m-0 mt-3 grid grid-cols-2 gap-3 text-center">
@@ -132,7 +133,5 @@
                 @endforeach
             </dl>
         </x-card>
-
-        @include('school.dashboard._activity')
-    </div>
+    </aside>
 </div>

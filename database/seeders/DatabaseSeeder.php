@@ -119,6 +119,11 @@ class DatabaseSeeder extends Seeder
                 $b->staff($key, array_filter(compact('title', 'first', 'last', 'gender', 'designation', 'department', 'email')), SchoolRole::Teacher);
             }
 
+            // Not everyone is full time: a part-time French teacher, a contract coach and a corps member.
+            $b->staffMember('gyang')->update(['employment_type' => 'part_time']);
+            $b->staffMember('ekpo')->update(['employment_type' => 'contract']);
+            $b->staffMember('fashola')->update(['employment_type' => 'nysc', 'date_employed' => now()->subMonths(4)->startOfMonth()]);
+
             $s = fn (string $key) => $b->staffMember($key);
             $b->assignTeachers([
                 'MTH' => ['junior' => $s('okonkwo'), 'senior' => $s('ogunleye')],
@@ -209,6 +214,7 @@ class DatabaseSeeder extends Seeder
             $b->office(proprietor: 'proprietor', principal: 'principal', bursar: 'bursar');
             $b->inventory();
             $b->payroll();
+            $b->specialExams();
 
             $b->logo('#1f5f3f', '#e8b931');
             $b->fees(['nursery' => 120_000, 'primary' => 145_000, 'junior' => 185_000, 'senior' => 210_000]);

@@ -48,13 +48,11 @@
         @include('portal._today')
     @endif
 
-    @if ($ownProfile)
-        <div class="max-w-5xl">@include('school.announcements._latest')</div>
-    @endif
-
+    <div @class(['grid grid-cols-1 gap-6', 'xl:grid-cols-[minmax(0,1fr)_18rem]' => $ownProfile && $latestNotices->isNotEmpty()])>
+        <div class="min-w-0">
     <x-tabs :tabs="$ownProfile
-        ? ['results' => ['label' => 'Results', 'count' => $publishedResults->count()], 'work' => ['label' => 'My work', 'count' => $todo + $openQuizzes], 'timetable' => 'Timetable', 'exams' => ['label' => 'Exams', 'count' => $examPapers->count()], 'attendance' => 'Attendance', 'subjects' => 'Subjects & teachers', 'calendar' => 'Term calendar']
-        : ['results' => ['label' => 'Results', 'count' => $publishedResults->count()], 'fees' => ['label' => 'Fees', 'count' => $invoices->filter(fn ($invoice) => $invoice->status->isOpen())->count()], 'attendance' => 'Attendance', 'work' => 'Homework & tests', 'timetable' => 'Timetable', 'exams' => ['label' => 'Exams', 'count' => $examPapers->count()], 'subjects' => 'Teachers', 'calendar' => 'Term calendar', 'contacts' => 'Contacts']" label="Class information" class="max-w-5xl">
+        ? ['results' => ['label' => 'Results', 'count' => $publishedResults->count() + $specialExams->count()], 'work' => ['label' => 'My work', 'count' => $todo + $openQuizzes], 'timetable' => 'Timetable', 'exams' => ['label' => 'Exams', 'count' => $examPapers->count()], 'attendance' => 'Attendance', 'subjects' => 'Subjects & teachers', 'calendar' => 'Term calendar']
+        : ['results' => ['label' => 'Results', 'count' => $publishedResults->count() + $specialExams->count()], 'fees' => ['label' => 'Fees', 'count' => $invoices->filter(fn ($invoice) => $invoice->status->isOpen())->count()], 'attendance' => 'Attendance', 'work' => 'Homework & tests', 'timetable' => 'Timetable', 'exams' => ['label' => 'Exams', 'count' => $examPapers->count()], 'subjects' => 'Teachers', 'calendar' => 'Term calendar', 'contacts' => 'Contacts']" label="Class information">
 
 
     <x-tab name="exams">
@@ -90,24 +88,75 @@
     </x-tab>
 
     <x-tab name="results">
-        @if ($publishedResults->isEmpty())
+        @if ($publishedResults->isEmpty() && $specialExams->isEmpty())
             <x-card><x-empty-state icon="file-text" title="No results yet" body="Results appear here as soon as the school publishes them for your class." /></x-card>
-        @else
+        @elseif ($publishedResults->isNotEmpty())
             <div class="flex flex-col gap-3">
                 @foreach ($publishedResults as $result)
-                    <div class="flex flex-wrap items-center gap-4 rounded-2xl border border-line bg-white p-5">
-                        <div class="min-w-0 flex-1">
-                            <div class="font-semibold">{{ $result['term']->name }} · {{ $result['term']->academicSession->name }}</div>
-                            <div class="text-sm text-muted">{{ $result['arm']->displayName() }} · {{ $result['row']['subject_count'] }} subjects</div>
+                    <div class="rounded-2xl border border-line bg-white p-5">
+                        <div class="flex flex-wrap items-start justify-between gap-3">
+                            <div class="min-w-0">
+                                <div class="font-semibold">{{ $result['term']->name }} · {{ $result['term']->academicSession->name }}</div>
+                                <div class="text-sm text-muted">{{ $result['arm']->displayName() }} · {{ $result['row']['subject_count'] }} subjects</div>
+                            </div>
+                            <x-button data-native variant="soft" icon="file-text" :href="route('school.results.report', [$student, 'term' => $result['term']->id])">{{ $result['row']['complete'] ? 'Report card' : 'Results so far' }}</x-button>
                         </div>
                         @if ($result['row']['complete'])
-                            <div class="text-center"><div class="text-xs text-muted">Average</div><div class="text-xl font-bold">{{ $result['row']['average'] }}</div></div>
-                            <div class="text-center"><div class="text-xs text-muted">Position</div><div class="text-xl font-bold text-brand-600">{{ isset($result['row']['position']) ? \App\Support\Results\ResultCalculator::ordinal($result['row']['position']) : '—' }} <span class="text-sm font-medium text-muted">of {{ $result['size'] }}</span></div></div>
+                            <div class="mt-4 grid grid-cols-2 gap-3 sm:max-w-sm">
+                                <div class="rounded-xl bg-canvas px-3 py-3 text-center">
+                                    <div class="text-xs text-muted">Average</div>
+                                    <div class="text-xl font-bold">{{ $result['row']['average'] }}</div>
+                                </div>
+                                <div class="rounded-xl bg-canvas px-3 py-3 text-center">
+                                    <div class="text-xs text-muted">Position</div>
+                                    <div class="text-xl font-bold text-brand-600">{{ isset($result['row']['position']) ? \App\Support\Results\ResultCalculator::ordinal($result['row']['position']) : '—' }} <span class="text-sm font-medium text-muted">of {{ $result['size'] }}</span></div>
+                                </div>
+                            </div>
                         @else
-                            <x-badge tone="gold">Results so far</x-badge>
-                            <div class="text-center"><div class="text-xs text-muted">Average so far</div><div class="text-xl font-bold">{{ $result['row']['percent'] }}%</div></div>
+                            <div class="mt-4 flex flex-wrap items-center gap-3">
+                                <x-badge tone="gold">Results so far</x-badge>
+                                <div class="rounded-xl bg-canvas px-4 py-3 text-center">
+                                    <div class="text-xs text-muted">Average so far</div>
+                                    <div class="text-xl font-bold">{{ $result['row']['percent'] }}%</div>
+                                </div>
+                            </div>
                         @endif
-                        <x-button data-native variant="soft" icon="file-text" :href="route('school.results.report', [$student, 'term' => $result['term']->id])">{{ $result['row']['complete'] ? 'Report card' : 'Results so far' }}</x-button>
+                    </div>
+                @endforeach
+            </div>
+        @endif
+
+        @if ($specialExams->isNotEmpty())
+            <h2 @class(['m-0 mb-3 text-sm font-semibold tracking-[0.05em] text-muted uppercase', 'mt-6' => $publishedResults->isNotEmpty()])>Mock &amp; practice exams</h2>
+            <div class="flex flex-col gap-3">
+                @foreach ($specialExams as $special)
+                    <div class="rounded-2xl border border-line bg-white p-5">
+                        <div class="flex flex-wrap items-start justify-between gap-3">
+                            <div class="min-w-0">
+                                <div class="font-semibold">{{ $special['exam']->title }}</div>
+                                <div class="text-sm text-muted">{{ $special['exam']->kind->label() }} · {{ $special['exam']->held_on->format('j M Y') }}</div>
+                            </div>
+                            @if ($special['row']['passed'])
+                                <x-badge tone="naija">Passed</x-badge>
+                            @else
+                                <x-badge tone="danger">Below {{ $special['exam']->pass_mark }}%</x-badge>
+                            @endif
+                        </div>
+                        <div class="mt-4 grid grid-cols-2 gap-3 sm:max-w-sm">
+                            <div class="rounded-xl bg-canvas px-3 py-3 text-center">
+                                <div class="text-xs text-muted">Score</div>
+                                <div class="text-xl font-bold">{{ $special['row']['total'] }} <span class="text-sm font-medium text-muted">/ {{ $special['results']->maxTotal }}</span></div>
+                            </div>
+                            <div class="rounded-xl bg-canvas px-3 py-3 text-center">
+                                <div class="text-xs text-muted">Position</div>
+                                <div class="text-xl font-bold text-brand-600">{{ $special['row']['position'] ? \App\Support\Results\ResultCalculator::ordinal($special['row']['position']) : '—' }}</div>
+                            </div>
+                        </div>
+                        <ul class="m-0 mt-3 flex list-none flex-wrap gap-x-5 gap-y-1 p-0 text-sm">
+                            @foreach ($special['results']->papers as $paper)
+                                <li><span class="text-muted">{{ $paper->name }}</span> <span class="font-semibold tabular-nums">{{ $special['row']['scores'][$paper->id] ?? 'Absent' }}</span></li>
+                            @endforeach
+                        </ul>
                     </div>
                 @endforeach
             </div>
@@ -196,4 +245,10 @@
             @endunless
     </x-tab>
 </x-tabs>
+        </div>
+
+        @if ($ownProfile && $latestNotices->isNotEmpty())
+            <aside class="min-w-0">@include('school.announcements._latest')</aside>
+        @endif
+    </div>
 </x-layouts.app>

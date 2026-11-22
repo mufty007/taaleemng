@@ -128,6 +128,37 @@ class TimetableController extends Controller
 
     public function autofillAll(AutofillTimetable $autofill): RedirectResponse
     {
+        ['placed' => $placed, 'empty' => $empty, 'classes' => $classes] = $this->fillEveryClass($autofill);
+
+        activity('timetable')->log("filled empty lessons across {$classes} classes");
+
+        return to_route('school.timetable.index')->with('status', $placed
+            ? "Placed {$placed} lessons across {$classes} classes.".($empty ? " {$empty} periods are still free." : '')
+            : 'Nothing to place: every period already has a lesson, or the teachers are busy elsewhere. Use “Rebuild all” to start every class afresh.');
+    }
+
+    /**
+     * Start the whole school's timetable again: clear every class, then fill them all.
+     */
+    public function rebuildAll(AutofillTimetable $autofill): RedirectResponse
+    {
+        $cleared = TimetableEntry::query()->whereIn('class_arm_id', $this->arms()->pluck('id'))->delete();
+
+        ['placed' => $placed, 'empty' => $empty, 'classes' => $classes] = $this->fillEveryClass($autofill);
+
+        activity('timetable')->log("rebuilt the timetable for {$classes} classes ({$cleared} old lessons cleared)");
+
+        return to_route('school.timetable.index')->with('status', "Rebuilt the timetable: {$placed} lessons across {$classes} classes.".($empty ? " {$empty} periods are still free; fill them by hand if you need to." : ''));
+    }
+
+    /**
+     * Fill the empty lesson periods of every class with students, one class after another,
+     * so no teacher is booked twice.
+     *
+     * @return array{placed: int, empty: int, classes: int}
+     */
+    private function fillEveryClass(AutofillTimetable $autofill): array
+    {
         $placed = 0;
         $empty = 0;
         $classes = 0;
@@ -142,11 +173,7 @@ class TimetableController extends Controller
             }
         }
 
-        activity('timetable')->log("filled empty lessons across {$classes} classes");
-
-        return to_route('school.timetable.index')->with('status', $placed
-            ? "Placed {$placed} lessons across {$classes} classes.".($empty ? " {$empty} periods are still free." : '')
-            : 'Nothing to place: every period already has a lesson, or the teachers are busy elsewhere.');
+        return ['placed' => $placed, 'empty' => $empty, 'classes' => $classes];
     }
 
     public function clear(ClassArm $classArm): RedirectResponse

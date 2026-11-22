@@ -56,6 +56,17 @@ it('counts unread notices on the bell until they are opened', function () {
     $this->actingAs($parent)->get(route('school.portal', $this->school))->assertDontSee('unread');
 });
 
+it('lets someone tick a notice as read from the compact board', function () {
+    ($this->post)($this->principal, ['title' => 'Assembly moved', 'audience' => 'everyone']);
+    $notice = inSchool($this->school, fn () => Announcement::query()->where('title', 'Assembly moved')->sole());
+    $student = $this->jss1->student->user;
+    $tick = 'Mark “Assembly moved” as read';
+
+    $this->actingAs($student)->get(route('school.portal', $this->school))->assertSee($tick);
+    $this->actingAs($student)->post(route('school.announcements.mark-read', [$this->school, $notice]))->assertRedirect();
+    $this->actingAs($student)->get(route('school.portal', $this->school))->assertDontSee($tick);
+});
+
 it('lets teachers post only to the classes they teach', function () {
     ($this->post)($this->teacher->user, ['audience' => 'class', 'class_arm_id' => $this->jss1a->id])->assertSessionHasNoErrors();
     ($this->post)($this->teacher->user, ['audience' => 'class', 'class_arm_id' => $this->jss2a->id])->assertSessionHasErrorsIn('announcement', 'class_arm_id');

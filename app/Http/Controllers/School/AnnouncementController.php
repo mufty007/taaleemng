@@ -11,6 +11,7 @@ use App\Models\ClassArm;
 use App\Models\User;
 use App\Support\Tenancy\TenantRule;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -105,6 +106,26 @@ class AnnouncementController extends Controller
         }
 
         return back()->with('status', 'All caught up.');
+    }
+
+    /**
+     * Tick one notice off the compact board without opening it.
+     */
+    public function markRead(Request $request, Announcement $announcement): RedirectResponse|JsonResponse
+    {
+        $user = $request->user();
+        abort_unless(Announcement::query()->visibleTo($user)->whereKey($announcement->id)->exists(), 404);
+
+        AnnouncementRead::query()->firstOrCreate(
+            ['announcement_id' => $announcement->id, 'user_id' => $user->id],
+            ['read_at' => now()],
+        );
+
+        if ($request->wantsJson()) {
+            return response()->json(['ok' => true]);
+        }
+
+        return back()->with('status', 'Marked as read.');
     }
 
     /**

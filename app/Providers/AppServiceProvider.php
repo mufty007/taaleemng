@@ -4,10 +4,12 @@ namespace App\Providers;
 
 use App\Models\Term;
 use App\Models\User;
+use App\Support\Reports\ReportCatalogue;
 use App\Support\Tenancy\CurrentSchool;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use Spatie\Activitylog\Models\Activity;
@@ -28,6 +30,9 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Model::preventLazyLoading(! $this->app->isProduction());
+
+        // The Reports page is open to anyone allowed at least one report on it.
+        Gate::define('view-reports', fn (User $user): bool => ReportCatalogue::visibleTo($user) !== []);
 
         // Stamp every activity log row with the school in context and the client IP.
         Activity::creating(function (Activity $activity): void {

@@ -47,6 +47,7 @@ final class SchoolNavigation
                 ['Score entry', 'file-pen-line', 'school.scores.index', 'scores.enter', 'school.scores.*'],
                 ['Results & broadsheets', 'file-text', 'school.results.index', 'results.view', 'school.results.*'],
                 ['Classwork & CBT', 'monitor-check', 'school.classwork.index', 'scores.enter', 'school.classwork.*'],
+                ['Special exams', 'award', 'school.special-exams.index', 'academics.manage', 'school.special-exams.*'],
             ],
             'Finance' => [
                 ['Invoices', 'receipt', 'school.invoices.index', 'finance.view', 'school.invoices.*'],
@@ -60,7 +61,7 @@ final class SchoolNavigation
             ],
             'System' => [
                 ['School information', 'school', 'school.profile.edit', 'school.manage', 'school.profile.*'],
-                ['Reports', 'bar-chart-3', 'school.reports.index', 'school.manage', 'school.reports.*'],
+                ['Reports', 'bar-chart-3', 'school.reports.index', 'view-reports', 'school.reports.*'],
 
                 ['Users & roles', 'users-round', 'school.members.index', 'users.manage', 'school.members.*'],
                 ['Activity log', 'history', 'school.activity.index', 'activity.view', 'school.activity.*'],

@@ -77,7 +77,13 @@ class DashboardController extends Controller
             'recentActivity' => $user->can('activity.view')
                 ? Activity::query()->where('school_id', $school->id)->with('causer')->latest()->limit(6)->get()
                 : collect(),
-            'latestNotices' => Announcement::query()->visibleTo($user)->with(['reads' => fn ($query) => $query->where('user_id', $user->id)])->noticeBoardOrder()->limit(3)->get(),
+            'latestNotices' => Announcement::query()
+                ->visibleTo($user)
+                ->whereDoesntHave('reads', fn ($query) => $query->where('user_id', $user->id))
+                ->with(['reads' => fn ($query) => $query->where('user_id', $user->id)])
+                ->noticeBoardOrder()
+                ->limit(5)
+                ->get(),
             'setupSteps' => $this->setupSteps($school->address, $school->phone, $session, $classCount, $studentCount, $staffCount),
         ];
 

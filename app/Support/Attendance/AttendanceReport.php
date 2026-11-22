@@ -9,6 +9,7 @@ use App\Models\Enrolment;
 use App\Models\Staff;
 use App\Models\StaffAttendanceRecord;
 use App\Models\Term;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
@@ -70,7 +71,7 @@ final class AttendanceReport
     /**
      * Per-class presence rate for the term.
      *
-     * @return Collection<int, array{arm: ClassArm, students: int, days_taken: int, marked: int, present: int, rate: int|null}>
+     * @return Collection<int, array{arm: ClassArm, students: int, days_taken: int, marked: int, present: int, absent: int, late: int, rate: int|null}>
      */
     public static function byClass(Term $term): Collection
     {
@@ -102,15 +103,49 @@ final class AttendanceReport
                 ->filter(fn ($row) => $row->status === AttendanceStatus::Present || $row->status === AttendanceStatus::Late)
                 ->sum(fn ($row) => (int) $row->getAttribute('total'));
 
+            $count = fn (AttendanceStatus $status): int => (int) $rows->filter(fn ($row) => $row->status === $status)->sum(fn ($row) => (int) $row->getAttribute('total'));
+
             return [
                 'arm' => $arm,
                 'students' => $arm->enrolments_count,
                 'days_taken' => (int) ($daysTaken[$arm->id] ?? 0),
                 'marked' => $marked,
                 'present' => $present,
+                'absent' => $count(AttendanceStatus::Absent),
+                'late' => $count(AttendanceStatus::Late),
                 'rate' => $marked === 0 ? null : (int) round($present / $marked * 100),
             ];
         });
+    }
+
+    /**
+     * Whole-school student presence for each school day the register was taken.
+     *
+     * @return Collection<string, array{date: Carbon, marked: int, present: int, absent: int, late: int, rate: int}> by Y-m-d
+     */
+    public static function daily(Term $term): Collection
+    {
+        return AttendanceRecord::query()
+            ->where('term_id', $term->id)
+            ->selectRaw('date, status, count(*) as total')
+            ->groupBy('date', 'status')
+            ->orderBy('date')
+            ->get()
+            ->groupBy(fn (AttendanceRecord $row) => $row->date->toDateString())
+            ->map(function (Collection $rows): array {
+                $count = fn (AttendanceStatus $status): int => (int) $rows->filter(fn ($row) => $row->status === $status)->sum(fn ($row) => (int) $row->getAttribute('total'));
+                $marked = (int) $rows->sum(fn ($row) => (int) $row->getAttribute('total'));
+                $present = $count(AttendanceStatus::Present) + $count(AttendanceStatus::Late);
+
+                return [
+                    'date' => $rows->first()->date,
+                    'marked' => $marked,
+                    'present' => $present,
+                    'absent' => $count(AttendanceStatus::Absent),
+                    'late' => $count(AttendanceStatus::Late),
+                    'rate' => (int) round($present / $marked * 100),
+                ];
+            });
     }
 
     /**

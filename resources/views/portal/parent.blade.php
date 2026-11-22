@@ -18,56 +18,60 @@
         </div>
     @endif
 
-    @include('school.announcements._latest')
-
-    <div class="grid grid-cols-1 gap-5 md:grid-cols-2" data-stagger>
-        @foreach ($children as $child)
-            @php($arm = $child->currentEnrolment?->classArm)
-            <article class="flex flex-col gap-5 rounded-3xl border border-line bg-white p-6">
-                <div class="flex items-center gap-4">
-                    <x-avatar :person="$child" class="size-16 rounded-2xl text-xl" />
-                    <div class="min-w-0">
-                        <h2 class="m-0 text-xl font-bold tracking-[-0.02em]">{{ $child->fullName() }}</h2>
-                        <div class="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
-                            @if ($arm)
-                                <x-badge tone="brand">{{ $arm->displayName() }}</x-badge>
-                            @endif
-                            <span class="font-mono">{{ $child->admission_no }}</span>
+    <div @class(['grid grid-cols-1 gap-6', 'xl:grid-cols-[minmax(0,1fr)_18rem]' => $latestNotices->isNotEmpty()])>
+        <div class="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-2" data-stagger>
+            @foreach ($children as $child)
+                @php($arm = $child->currentEnrolment?->classArm)
+                <article class="flex flex-col gap-5 rounded-3xl border border-line bg-white p-6">
+                    <div class="flex items-center gap-4">
+                        <x-avatar :person="$child" class="size-16 rounded-2xl text-xl" />
+                        <div class="min-w-0">
+                            <h2 class="m-0 text-xl font-bold tracking-[-0.02em]">{{ $child->fullName() }}</h2>
+                            <div class="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
+                                @if ($arm)
+                                    <x-badge tone="brand">{{ $arm->displayName() }}</x-badge>
+                                @endif
+                                <span class="font-mono">{{ $child->admission_no }}</span>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <dl class="m-0 grid grid-cols-2 gap-3 text-sm">
-                    <div class="rounded-xl bg-canvas p-3">
-                        <dt class="text-muted">Form teacher</dt>
-                        <dd class="m-0 mt-0.5 font-semibold">{{ $arm?->formTeacher?->fullName() ?? 'Not assigned' }}</dd>
+                    <dl class="m-0 grid grid-cols-2 gap-3 text-sm">
+                        <div class="rounded-xl bg-canvas p-3">
+                            <dt class="text-muted">Form teacher</dt>
+                            <dd class="m-0 mt-0.5 font-semibold">{{ $arm?->formTeacher?->fullName() ?? 'Not assigned' }}</dd>
+                        </div>
+                        <div class="rounded-xl bg-canvas p-3">
+                            <dt class="text-muted">Age</dt>
+                            <dd class="m-0 mt-0.5 font-semibold">{{ $child->age() ? $child->age().' years' : '—' }}</dd>
+                        </div>
+                    </dl>
+
+                    @php($balance = $balances[$child->id] ?? 0)
+                    <div class="grid grid-cols-3 gap-2 text-center text-xs">
+                        <a href="{{ route('school.portal.child', $child) }}#results" class="flex flex-col items-center gap-1.5 rounded-xl border border-line px-2 py-3 text-muted hover:border-brand hover:text-ink">
+                            <x-lucide-file-text class="size-5" aria-hidden="true" /> Results
+                        </a>
+                        <a href="{{ route('school.portal.child', $child) }}#fees" @class(['flex flex-col items-center gap-1 rounded-xl border px-2 py-3 hover:border-brand', 'border-danger/30 bg-danger-50 text-danger' => $balance > 0, 'border-line text-muted' => $balance <= 0])>
+                            <x-lucide-receipt class="size-5" aria-hidden="true" />
+                            <span>{{ $balance > 0 ? 'Fees owed' : 'School fees' }}</span>
+                            <span class="text-sm font-bold">{{ $balance > 0 ? \App\Support\Money::format($balance) : 'Paid up' }}</span>
+                        </a>
+                        @php($register = $attendance[$child->currentEnrolment?->id] ?? null)
+                        <a href="{{ route('school.portal.child', $child) }}#attendance" class="flex flex-col items-center gap-1.5 rounded-xl border border-line px-2 py-3 text-muted hover:border-brand hover:text-ink">
+                            <x-lucide-clipboard-check class="size-5" aria-hidden="true" />
+                            <span>Attendance</span>
+                            <span class="text-sm font-bold text-ink">{{ $register && $register['rate'] !== null ? $register['rate'].'%' : '—' }}</span>
+                        </a>
                     </div>
-                    <div class="rounded-xl bg-canvas p-3">
-                        <dt class="text-muted">Age</dt>
-                        <dd class="m-0 mt-0.5 font-semibold">{{ $child->age() ? $child->age().' years' : '—' }}</dd>
-                    </div>
-                </dl>
 
-                @php($balance = $balances[$child->id] ?? 0)
-                <div class="grid grid-cols-3 gap-2 text-center text-xs">
-                    <a href="{{ route('school.portal.child', $child) }}#results" class="flex flex-col items-center gap-1.5 rounded-xl border border-line px-2 py-3 text-muted hover:border-brand hover:text-ink">
-                        <x-lucide-file-text class="size-5" aria-hidden="true" /> Results
-                    </a>
-                    <a href="{{ route('school.portal.child', $child) }}#fees" @class(['flex flex-col items-center gap-1 rounded-xl border px-2 py-3 hover:border-brand', 'border-danger/30 bg-danger-50 text-danger' => $balance > 0, 'border-line text-muted' => $balance <= 0])>
-                        <x-lucide-receipt class="size-5" aria-hidden="true" />
-                        <span>{{ $balance > 0 ? 'Fees owed' : 'School fees' }}</span>
-                        <span class="text-sm font-bold">{{ $balance > 0 ? \App\Support\Money::format($balance) : 'Paid up' }}</span>
-                    </a>
-                    @php($register = $attendance[$child->currentEnrolment?->id] ?? null)
-                    <a href="{{ route('school.portal.child', $child) }}#attendance" class="flex flex-col items-center gap-1 rounded-xl border border-line px-2 py-3 text-muted hover:border-brand hover:text-ink">
-                        <x-lucide-clipboard-check class="size-5" aria-hidden="true" />
-                        <span>Attendance</span>
-                        <span class="text-sm font-bold text-ink">{{ $register && $register['rate'] !== null ? $register['rate'].'%' : '—' }}</span>
-                    </a>
-                </div>
+                    <x-button variant="secondary" :href="route('school.portal.child', $child)" class="mt-auto">See {{ $child->first_name }}’s class and teachers</x-button>
+                </article>
+            @endforeach
+        </div>
 
-                <x-button variant="secondary" :href="route('school.portal.child', $child)" class="mt-auto">See {{ $child->first_name }}’s class and teachers</x-button>
-            </article>
-        @endforeach
+        @if ($latestNotices->isNotEmpty())
+            <aside class="min-w-0">@include('school.announcements._latest')</aside>
+        @endif
     </div>
 </x-layouts.app>

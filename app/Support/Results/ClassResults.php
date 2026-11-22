@@ -5,22 +5,27 @@ namespace App\Support\Results;
 use App\Models\AssessmentComponent;
 use App\Models\ClassArm;
 use App\Models\ClassSubject;
+use App\Models\Enrolment;
 use App\Models\GradingScheme;
+use App\Models\Student;
 use App\Models\Term;
 use Illuminate\Support\Collection;
 
 /**
  * A class's computed results for one term.
+ *
+ * @phpstan-type SubjectResult array{scores: array<int, float>, total: float, max: int, percent: float, complete: bool, grade: string, remark: string, position?: int}
+ * @phpstan-type StudentResult array{enrolment: Enrolment, student: Student, subjects: array<int, SubjectResult>, total: float, average: float|null, percent: float|null, subject_count: int, complete: bool, position?: int}
  */
 final readonly class ClassResults
 {
-    /** @var Collection<int, array<string, mixed>> */
+    /** @var Collection<int, StudentResult> */
     public Collection $students;
 
     /**
      * @param  Collection<int, AssessmentComponent>  $components
      * @param  Collection<int, ClassSubject>  $classSubjects
-     * @param  list<array<string, mixed>>  $studentRows
+     * @param  list<StudentResult>  $studentRows
      * @param  array<int, array{average: float, highest: float, lowest: float, count: int, percent: float}>  $statistics  by class subject id
      */
     public function __construct(
@@ -70,7 +75,7 @@ final readonly class ClassResults
     }
 
     /**
-     * @return array<string, mixed>|null
+     * @return StudentResult|null
      */
     public function forStudent(int $studentId): ?array
     {

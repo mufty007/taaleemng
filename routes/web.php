@@ -12,6 +12,7 @@ use App\Http\Controllers\Portal\PortalController;
 use App\Http\Controllers\School;
 use App\Http\Controllers\SchoolPickerController;
 use App\Http\Controllers\Webhooks\PaystackWebhookController;
+use App\Support\Reports\ReportCatalogue;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -71,6 +72,7 @@ Route::middleware('auth')->group(function () {
             Route::get('/notices', [School\AnnouncementController::class, 'index'])->name('announcements.index');
             Route::post('/notices', [School\AnnouncementController::class, 'store'])->name('announcements.store');
             Route::post('/notices/read', [School\AnnouncementController::class, 'markAllRead'])->name('announcements.read');
+            Route::post('/notices/{announcement}/read', [School\AnnouncementController::class, 'markRead'])->name('announcements.mark-read');
             Route::get('/notices/{announcement}', [School\AnnouncementController::class, 'show'])->name('announcements.show');
             Route::delete('/notices/{announcement}', [School\AnnouncementController::class, 'destroy'])->name('announcements.destroy');
 
@@ -117,6 +119,7 @@ Route::middleware('auth')->group(function () {
                 Route::delete('/timetable/periods/{period}', [School\TimetableController::class, 'destroyPeriod'])->name('timetable.periods.destroy');
                 Route::put('/timetable/{classArm}/slots', [School\TimetableController::class, 'saveSlot'])->name('timetable.slots');
                 Route::post('/timetable/autofill-all', [School\TimetableController::class, 'autofillAll'])->name('timetable.autofill-all');
+                Route::post('/timetable/rebuild-all', [School\TimetableController::class, 'rebuildAll'])->name('timetable.rebuild-all');
                 Route::post('/timetable/{classArm}/autofill', [School\TimetableController::class, 'autofill'])->name('timetable.autofill');
                 Route::post('/timetable/{classArm}/clear', [School\TimetableController::class, 'clear'])->name('timetable.clear');
             });
@@ -242,6 +245,19 @@ Route::middleware('auth')->group(function () {
                 Route::post('/results/{classArm}/remarks/fill', [School\ReportRemarksController::class, 'autofill'])->name('remarks.autofill');
             });
             Route::post('/results/{classArm}/publish', [School\ResultController::class, 'togglePublication'])->middleware('can:results.publish')->name('results.publish');
+
+            // Special exams: mocks and WAEC, NECO, JAMB, BECE and Common Entrance practice
+            Route::middleware('can:academics.manage')->prefix('/special-exams')->name('special-exams.')->group(function () {
+                Route::get('/', [School\SpecialExamController::class, 'index'])->name('index');
+                Route::post('/', [School\SpecialExamController::class, 'store'])->name('store');
+                Route::get('/{specialExam}', [School\SpecialExamController::class, 'show'])->name('show');
+                Route::get('/{specialExam}/scores', [School\SpecialExamController::class, 'scores'])->name('scores');
+                Route::put('/{specialExam}/scores', [School\SpecialExamController::class, 'saveScores'])->name('scores.update');
+                Route::post('/{specialExam}/publish', [School\SpecialExamController::class, 'publish'])->name('publish');
+                Route::get('/{specialExam}/print', [School\SpecialExamController::class, 'print'])->name('print');
+                Route::get('/{specialExam}/slips', [School\SpecialExamController::class, 'slips'])->name('slips');
+                Route::delete('/{specialExam}', [School\SpecialExamController::class, 'destroy'])->name('destroy');
+            });
             Route::get('/report-cards/{student}', [School\ResultController::class, 'report'])->name('results.report');
 
             Route::middleware('can:students.view')->group(function () {
@@ -301,8 +317,13 @@ Route::middleware('auth')->group(function () {
                 Route::put('/school-information', [School\SchoolProfileController::class, 'update'])->name('profile.update');
                 Route::get('/settings', [School\SettingsController::class, 'edit'])->name('settings.edit');
                 Route::put('/settings', [School\SettingsController::class, 'update'])->name('settings.update');
+            });
+
+            // Reports: each one checks its own permission (see ReportCatalogue).
+            Route::middleware('can:view-reports')->group(function () {
                 Route::get('/reports', [School\ReportController::class, 'index'])->name('reports.index');
-                Route::get('/reports/{report}', [School\ReportController::class, 'show'])->whereIn('report', ['enrolment', 'fees', 'attendance', 'staff'])->name('reports.show');
+                Route::get('/reports/{report}', [School\ReportController::class, 'show'])->whereIn('report', ReportCatalogue::keys())->name('reports.show');
+                Route::get('/reports/{report}/print', [School\ReportController::class, 'print'])->whereIn('report', ReportCatalogue::keys())->name('reports.print');
             });
 
             Route::middleware('can:users.manage')->group(function () {
