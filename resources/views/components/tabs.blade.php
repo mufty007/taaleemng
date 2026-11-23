@@ -24,7 +24,7 @@
                     id="tab-{{ $name }}"
                     data-tab="{{ $name }}"
                     aria-controls="panel-{{ $name }}"
-                    @click="select(@js($name))"
+                    @click.prevent.stop="select(@js($name))"
                     :aria-selected="(tab === @js($name)).toString()"
                     :tabindex="tab === @js($name) ? 0 : -1"
                     :class="tab === @js($name) ? 'bg-ink text-white' : 'text-muted hover:text-ink'"

@@ -4,6 +4,7 @@ namespace App\Actions\Academic;
 
 use App\Actions\Results\SetUpAssessment;
 use App\Enums\ClassSection;
+use App\Enums\ClassStructure;
 use App\Models\ClassLevel;
 use App\Models\Stream;
 use App\Models\Subject;
@@ -13,8 +14,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * One click for a new school: create the class levels, an "A" arm for each
- * (one arm per stream in SSS), the subject list, and each class's subjects.
+ * One click for a new school: create the class levels, arms (or a single class
+ * per level when the school uses that structure), subjects, and class subjects.
  */
 class ApplyNigerianDefaults
 {
@@ -32,7 +33,9 @@ class ApplyNigerianDefaults
             throw ValidationException::withMessages(['defaults' => 'This school already has classes set up.']);
         }
 
-        DB::transaction(function () use ($school): void {
+        $single = $school->class_structure === ClassStructure::Single;
+
+        DB::transaction(function () use ($school, $single): void {
             foreach (NigerianCurriculum::subjectsFor($school->school_type) as $subject) {
                 Subject::query()->firstOrCreate(['code' => $subject['code']], [
                     'name' => $subject['name'],
@@ -54,10 +57,11 @@ class ApplyNigerianDefaults
 
                     if ($section === ClassSection::Senior) {
                         foreach (array_values($streams) as $index => $stream) {
-                            $this->addClassArm->handle($level, chr(65 + $index), $stream);
+                            // Single structure: use the stream name so arms stay unique per level.
+                            $this->addClassArm->handle($level, $single ? $stream->name : chr(65 + $index), $stream);
                         }
                     } else {
-                        $this->addClassArm->handle($level, 'A');
+                        $this->addClassArm->handle($level, $single ? '' : 'A');
                     }
                 }
             }

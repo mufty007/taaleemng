@@ -26,10 +26,10 @@ class CreateSchool
     ) {}
 
     /**
-     * @param  array{name: string, school_type: string, state?: ?string, lga?: ?string, phone?: ?string, email?: ?string, slug?: ?string, short_code?: ?string}  $attributes
-     * @param  array{name: string, email: string}  $admin
+     * @param  array{name: string, school_type: string|\BackedEnum, state?: ?string, lga?: ?string, phone?: ?string, email?: ?string, slug?: ?string, short_code?: ?string, plan?: mixed, billing_model?: mixed, billing_cycle?: ?string, class_structure?: mixed}  $attributes
+     * @param  array{name: string, email: string, password?: string}  $admin
      */
-    public function handle(array $attributes, array $admin): School
+    public function handle(array $attributes, array $admin, bool $sendPasswordReset = true): School
     {
         [$school, $adminUser] = DB::transaction(function () use ($attributes, $admin): array {
             $school = School::query()->create([
@@ -44,7 +44,10 @@ class CreateSchool
 
             $adminUser = User::query()->firstOrCreate(
                 ['email' => Str::lower($admin['email'])],
-                ['name' => $admin['name'], 'password' => Str::password(32)],
+                [
+                    'name' => $admin['name'],
+                    'password' => $admin['password'] ?? Str::password(32),
+                ],
             );
 
             $this->addSchoolMember->handle($school, $adminUser, SchoolRole::SchoolAdmin);
@@ -57,7 +60,7 @@ class CreateSchool
             return [$school, $adminUser];
         });
 
-        if ($adminUser->wasRecentlyCreated) {
+        if ($sendPasswordReset && $adminUser->wasRecentlyCreated && blank($admin['password'] ?? null)) {
             Password::broker()->sendResetLink(['email' => $adminUser->email]);
         }
 

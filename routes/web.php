@@ -6,6 +6,7 @@ use App\Http\Controllers\AppEntryController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\Marketing\DemoRequestController;
 use App\Http\Controllers\Marketing\MarketingController;
+use App\Http\Controllers\Marketing\SchoolSignupController;
 use App\Http\Controllers\PayLinkController;
 use App\Http\Controllers\Platform;
 use App\Http\Controllers\Portal;
@@ -26,6 +27,8 @@ Route::get('/', [MarketingController::class, 'home'])->name('home');
 Route::get('/contact', [MarketingController::class, 'contact'])->name('contact');
 Route::get('/privacy', [MarketingController::class, 'legal'])->defaults('page', 'privacy')->name('privacy');
 Route::get('/terms', [MarketingController::class, 'legal'])->defaults('page', 'terms')->name('terms');
+Route::get('/signup', [SchoolSignupController::class, 'create'])->middleware('guest')->name('signup');
+Route::post('/signup', [SchoolSignupController::class, 'store'])->middleware(['guest', 'throttle:10,1'])->name('signup.store');
 Route::post('/demo-requests', [DemoRequestController::class, 'store'])
     ->middleware('throttle:demo-requests')
     ->name('demo-requests.store');
@@ -331,7 +334,11 @@ Route::middleware('auth')->group(function () {
             });
 
             // System
+            Route::post('/onboarding/complete', [School\OnboardingController::class, 'complete'])->name('onboarding.complete');
+
             Route::middleware('can:school.manage')->group(function () {
+                Route::post('/settings/invoices/{invoice}/pay', [School\SubscriptionPaymentController::class, 'pay'])->name('settings.subscription.pay');
+                Route::get('/settings/subscription/callback', [School\SubscriptionPaymentController::class, 'callback'])->name('settings.subscription.callback');
                 Route::get('/school-information', [School\SchoolProfileController::class, 'edit'])->name('profile.edit');
                 Route::put('/school-information', [School\SchoolProfileController::class, 'update'])->name('profile.update');
                 Route::get('/settings', [School\SettingsController::class, 'edit'])->name('settings.edit');

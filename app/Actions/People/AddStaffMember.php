@@ -2,6 +2,7 @@
 
 namespace App\Actions\People;
 
+use App\Actions\Billing\AssertSeatAvailable;
 use App\Actions\Platform\AddSchoolMember;
 use App\Enums\SchoolRole;
 use App\Enums\StaffStatus;
@@ -24,6 +25,7 @@ class AddStaffMember
         private CurrentSchool $currentSchool,
         private SequenceGenerator $sequences,
         private AddSchoolMember $addSchoolMember,
+        private AssertSeatAvailable $assertSeatAvailable,
     ) {}
 
     /**
@@ -36,6 +38,8 @@ class AddStaffMember
         $school = $this->currentSchool->getOrFail();
         $phone = filled($data['phone'] ?? null) ? (User::normalisePhone($data['phone']) ?? $data['phone']) : null;
         $email = filled($data['email'] ?? null) ? Str::lower($data['email']) : null;
+
+        $this->assertSeatAvailable->forStaff();
 
         return DB::transaction(function () use ($school, $data, $role, $password, $phone, $email): array {
             $user = ($email ? User::query()->where('email', $email)->first() : null)

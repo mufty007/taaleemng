@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
  * @property MembershipStatus $status
  * @property Carbon|null $joined_at
  * @property Carbon|null $last_active_at
+ * @property Carbon|null $onboarding_completed_at
  */
 class Membership extends Pivot
 {
@@ -32,6 +33,7 @@ class Membership extends Pivot
             'status' => MembershipStatus::class,
             'joined_at' => 'datetime',
             'last_active_at' => 'datetime',
+            'onboarding_completed_at' => 'datetime',
         ];
     }
 

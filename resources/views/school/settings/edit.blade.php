@@ -6,17 +6,33 @@
         <div class="min-w-[220px] flex-1">
             <h2 class="m-0 text-lg font-semibold">Ta’aleem subscription</h2>
             <p class="m-0 mt-1 text-sm text-muted">
-                {{ $school->plan->label() }} plan{{ $school->pricePerStudent() ? ' · '.\App\Support\Money::format($school->pricePerStudent()).' per student per term' : '' }}{{ $school->paid_until ? ' · paid up to '.$school->paid_until->format('j M Y') : '' }}.
-                Questions about your plan? Email {{ config('taaleem.marketing.contact_email') }}.
+                {{ $school->plan->label() }} · {{ $school->billing_model->label() }}
+                @if ($school->billing_model === \App\Enums\BillingModel::PerStudent && $school->pricePerStudent())
+                    · {{ \App\Support\Money::format($school->pricePerStudent()) }} per student per term
+                @elseif ($school->billing_cycle === 'annual' && $school->plan->flatPriceAnnual())
+                    · {{ \App\Support\Money::format($school->plan->flatPriceAnnual()) }} / year
+                @elseif ($school->plan->flatPriceTermly())
+                    · {{ \App\Support\Money::format($school->plan->flatPriceTermly()) }} / term
+                @endif
+                · up to {{ number_format($school->max_students ?? $school->plan->maxStudents() ?? 0) }} students
+                / {{ number_format($school->max_staff ?? $school->plan->maxStaff() ?? 0) }} staff
+                {{ $school->paid_until ? ' · paid up to '.$school->paid_until->format('j M Y') : '' }}.
+                Questions? Email {{ config('taaleem.marketing.contact_email') }}.
             </p>
         </div>
         <ul class="m-0 flex w-full list-none flex-col gap-2 p-0 sm:w-auto sm:min-w-[320px]">
             @forelse ($subscriptionInvoices as $invoice)
-                <li class="flex items-center justify-between gap-3 rounded-xl bg-canvas px-3 py-2 text-sm">
+                <li class="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-canvas px-3 py-2 text-sm">
                     <span><span class="font-mono">{{ $invoice->number }}</span> · {{ $invoice->period }}</span>
                     <span class="flex items-center gap-2">
                         <span class="font-semibold">{{ \App\Support\Money::format($invoice->amount) }}</span>
                         <x-badge :tone="$invoice->isOverdue() ? 'danger' : $invoice->status->tone()">{{ $invoice->isOverdue() ? 'Overdue' : ($invoice->status === \App\Enums\SchoolInvoiceStatus::Sent ? 'Due '.$invoice->due_on->format('j M') : 'Paid') }}</x-badge>
+                        @if ($invoice->status === \App\Enums\SchoolInvoiceStatus::Sent && $platformPaystackReady)
+                            <form method="POST" action="{{ route('school.settings.subscription.pay', $invoice) }}">
+                                @csrf
+                                <x-button type="submit" variant="brand" size="sm">Pay online</x-button>
+                            </form>
+                        @endif
                     </span>
                 </li>
             @empty
@@ -117,6 +133,68 @@
                         @endforeach
                     </tbody>
                 </table>
+            </div>
+        </x-card>
+
+        <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <x-card class="flex flex-col gap-4">
+                <div>
+                    <h2 class="m-0 text-lg font-semibold">Class structure</h2>
+                    <p class="m-0 mt-1 text-sm text-muted">Some schools run JSS 1A and JSS 1B. Others keep one class per level. Switching to single classes can merge existing arms.</p>
+                </div>
+                <x-select-field label="How classes are organised" name="class_structure" :options="$classStructures" :value="old('class_structure', $school->class_structure->value)" />
+                @error('class_structure')
+                    <p class="m-0 text-[13px] font-medium text-danger">{{ $message }}</p>
+                @enderror
+                <label class="flex items-start gap-3 rounded-xl border border-line bg-canvas px-4 py-3">
+                    <input type="checkbox" name="merge_arms" value="1" @checked(old('merge_arms')) class="mt-1 size-4 rounded border-line">
+                    <span>
+                        <span class="block text-sm font-semibold">Merge arms into one class per level</span>
+                        <span class="block text-sm text-muted">Required when switching from A/B/C to single classes. Students and subjects move into one class; empty arms are removed.</span>
+                    </span>
+                </label>
+            </x-card>
+
+            <x-card class="flex flex-col gap-4">
+                <div>
+                    <h2 class="m-0 text-lg font-semibold">Setup checklist</h2>
+                    <p class="m-0 mt-1 text-sm text-muted">Shown on the dashboard until each step is done. Turn steps off or rename them for your school.</p>
+                </div>
+                @foreach ($setupDefaults as $key => $default)
+                    @php($custom = $school->setup_checklist[$key] ?? [])
+                    <div class="rounded-xl border border-line p-3">
+                        <label class="flex items-start gap-3">
+                            <input type="hidden" name="setup[{{ $key }}][enabled]" value="0">
+                            <input type="checkbox" name="setup[{{ $key }}][enabled]" value="1" @checked(old('setup.'.$key.'.enabled', $custom['enabled'] ?? true)) class="mt-1 size-4 rounded border-line">
+                            <span class="min-w-0 flex-1">
+                                <input type="text" name="setup[{{ $key }}][title]" value="{{ old('setup.'.$key.'.title', $custom['title'] ?? $default['title']) }}" class="field mb-2 text-sm font-semibold">
+                                <input type="text" name="setup[{{ $key }}][body]" value="{{ old('setup.'.$key.'.body', $custom['body'] ?? $default['body']) }}" class="field text-sm">
+                            </span>
+                        </label>
+                    </div>
+                @endforeach
+            </x-card>
+        </div>
+
+        <x-card class="flex flex-col gap-4">
+            <div>
+                <h2 class="m-0 text-lg font-semibold">Role onboarding</h2>
+                <p class="m-0 mt-1 text-sm text-muted">First-login tips for each role. One tip per line. Turn a role off to skip the welcome tour.</p>
+            </div>
+            <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                @foreach ($roleDefaults as $key => $default)
+                    @php($custom = $school->role_onboarding[$key] ?? [])
+                    <div class="rounded-xl border border-line p-4">
+                        <label class="mb-3 flex items-center gap-2 text-sm font-semibold">
+                            <input type="hidden" name="role_onboarding[{{ $key }}][enabled]" value="0">
+                            <input type="checkbox" name="role_onboarding[{{ $key }}][enabled]" value="1" @checked(old('role_onboarding.'.$key.'.enabled', $custom['enabled'] ?? true)) class="size-4 rounded border-line">
+                            {{ $roleLabels[$key] ?? $key }}
+                        </label>
+                        <x-field :label="'Title'" :name="'role_onboarding['.$key.'][title]'" :value="old('role_onboarding.'.$key.'.title', $custom['title'] ?? $default['title'])" />
+                        <label class="mt-3 block text-sm font-semibold" for="role-steps-{{ $key }}">Tips (one per line)</label>
+                        <textarea id="role-steps-{{ $key }}" name="role_onboarding[{{ $key }}][steps]" rows="4" class="field mt-1.5">{{ old('role_onboarding.'.$key.'.steps', isset($custom['steps']) ? implode("\n", $custom['steps']) : implode("\n", $default['steps'])) }}</textarea>
+                    </div>
+                @endforeach
             </div>
         </x-card>
 

@@ -90,7 +90,7 @@ class DashboardController extends Controller
                 ->noticeBoardOrder()
                 ->limit(5)
                 ->get(),
-            'setupSteps' => SetupChecklist::steps($school->address, $school->phone, $session, $classCount, $studentCount, $staffCount),
+            'setupSteps' => SetupChecklist::steps($school, $school->address, $school->phone, $session, $classCount, $studentCount, $staffCount),
         ];
 
         if ($mode === 'teacher' && $teacherDay) {

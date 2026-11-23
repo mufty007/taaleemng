@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\BillingModel;
+use App\Enums\ClassStructure;
 use App\Enums\Plan;
 use App\Enums\SchoolStatus;
 use App\Enums\SchoolType;
@@ -24,9 +26,15 @@ use Illuminate\Support\Str;
  * @property SchoolType $school_type
  * @property Carbon|null $trial_ends_at
  * @property Plan $plan
+ * @property BillingModel $billing_model
+ * @property ClassStructure $class_structure
  * @property int|null $price_per_student
+ * @property int|null $max_students
+ * @property int|null $max_staff
  * @property Carbon|null $paid_until
  * @property list<string>|null $disabled_modules
+ * @property array<string, mixed>|null $setup_checklist
+ * @property array<string, mixed>|null $role_onboarding
  * @property-read int|null $students_count Only on SchoolDirectory queries.
  * @property-read int|null $staff_count Only on SchoolDirectory queries.
  * @property-read Carbon|null $last_active_at Only on SchoolDirectory queries.
@@ -34,7 +42,8 @@ use Illuminate\Support\Str;
 #[Fillable([
     'name', 'slug', 'short_code', 'logo_path', 'motto', 'address', 'state', 'lga',
     'phone', 'email', 'website', 'school_type', 'curriculum_type', 'status', 'trial_ends_at',
-    'plan', 'price_per_student', 'billing_cycle', 'paid_until', 'disabled_modules', 'billing_notes',
+    'plan', 'billing_model', 'price_per_student', 'billing_cycle', 'paid_until', 'disabled_modules', 'billing_notes',
+    'max_students', 'max_staff', 'class_structure', 'setup_checklist', 'role_onboarding',
 ])]
 class School extends Model
 {
@@ -51,9 +60,15 @@ class School extends Model
             'school_type' => SchoolType::class,
             'trial_ends_at' => 'datetime',
             'plan' => Plan::class,
+            'billing_model' => BillingModel::class,
+            'class_structure' => ClassStructure::class,
             'price_per_student' => 'integer',
+            'max_students' => 'integer',
+            'max_staff' => 'integer',
             'paid_until' => 'date',
             'disabled_modules' => 'array',
+            'setup_checklist' => 'array',
+            'role_onboarding' => 'array',
         ];
     }
 

@@ -2,6 +2,9 @@
 
 namespace Database\Factories;
 
+use App\Enums\BillingModel;
+use App\Enums\ClassStructure;
+use App\Enums\Plan;
 use App\Enums\SchoolStatus;
 use App\Enums\SchoolType;
 use App\Models\School;
@@ -30,6 +33,10 @@ class SchoolFactory extends Factory
             'phone' => '+234'.fake()->numerify('80########'),
             'email' => fake()->unique()->safeEmail(),
             'status' => SchoolStatus::Active,
+            'plan' => Plan::Standard,
+            'billing_model' => BillingModel::Flat,
+            'billing_cycle' => 'termly',
+            'class_structure' => ClassStructure::Arms,
         ];
     }
 

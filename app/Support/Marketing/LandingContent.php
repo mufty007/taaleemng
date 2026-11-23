@@ -2,6 +2,8 @@
 
 namespace App\Support\Marketing;
 
+use App\Support\Billing\PlanCatalog;
+
 /**
  * Copy and demo data for the marketing landing page, kept out of the Blade view
  * so the template stays readable.
@@ -201,17 +203,20 @@ final class LandingContent
      */
     public static function plans(): array
     {
-        $price = function (string $key): ?string {
-            $value = config("taaleem.marketing.prices.{$key}");
-
-            return is_numeric($value) ? '₦'.number_format((float) $value) : null;
-        };
-
-        return [
-            ['key' => 'basic', 'name' => 'Basic', 'price' => $price('basic'), 'description' => 'For nursery and primary schools moving off paper and Excel.', 'cta' => 'Book a free demo', 'popular' => false, 'features' => ['Admissions & student records', 'Classes, subjects, sessions & terms', 'Attendance', 'Results processing', 'Email support']],
-            ['key' => 'standard', 'name' => 'Standard', 'price' => $price('standard'), 'description' => 'For growing primary and secondary schools that want everything in one place.', 'cta' => 'Book a free demo', 'popular' => true, 'features' => ['Everything in Basic', 'School fees, cashflow & finance', 'Exams & CBT', 'Time table management', 'Phone & WhatsApp support']],
-            ['key' => 'premium', 'name' => 'Premium', 'price' => $price('premium'), 'description' => 'All 17 modules, for larger schools with full staff and accounts teams.', 'cta' => 'Contact sales', 'popular' => false, 'features' => ['Everything in Standard', 'Staff & payroll', 'Inventory management', 'Special exams', 'Dedicated account manager']],
-        ];
+        return collect(PlanCatalog::publicPlans())->map(function (array $plan): array {
+            return [
+                'key' => $plan['key'],
+                'name' => $plan['name'],
+                'price' => $plan['flat_termly'],
+                'description' => $plan['description'],
+                'cta' => $plan['popular'] ? 'Start free trial' : ($plan['key'] === 'premium' ? 'Contact sales' : 'Start free trial'),
+                'popular' => $plan['popular'],
+                'features' => $plan['features'],
+                'per_student' => $plan['per_student'],
+                'flat_annual' => $plan['flat_annual'],
+                'seats' => number_format((int) $plan['max_students']).' students · '.number_format((int) $plan['max_staff']).' staff',
+            ];
+        })->all();
     }
 
     /**

@@ -19,8 +19,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $paid_at
  */
 #[Fillable([
-    'school_id', 'number', 'period', 'students', 'unit_price', 'amount', 'status', 'issued_on', 'due_on',
-    'paid_at', 'payment_method', 'payment_reference', 'notes', 'created_by',
+    'school_id', 'number', 'period', 'billing_model', 'students', 'unit_price', 'amount', 'status', 'issued_on', 'due_on',
+    'paid_at', 'payment_method', 'payment_reference', 'paystack_reference', 'notes', 'created_by',
 ])]
 class SchoolInvoice extends Model
 {

@@ -261,8 +261,8 @@
     <section id="pricing" class="mx-auto flex max-w-[1200px] flex-col gap-9 px-4 pt-14 pb-20 sm:px-6">
         <div class="flex flex-col items-center gap-3.5 text-center" data-reveal>
             <div class="kicker">Pricing</div>
-            <h2 class="display-2 max-w-[760px]">Pay per student, per term, in Naira.</h2>
-            <p class="m-0 max-w-[560px] text-[17px] leading-relaxed text-muted">No dollar charges and no surprise fees. Pay each term, or for the whole session.</p>
+            <h2 class="display-2 max-w-[760px]">All features. Pick the seats you need.</h2>
+            <p class="m-0 max-w-[560px] text-[17px] leading-relaxed text-muted">Flat fee per term or year, or pay per student — your choice. Prices in Naira, changeable anytime.</p>
         </div>
         <div class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] items-stretch gap-[18px]">
             @foreach ($plans as $plan)
@@ -281,15 +281,15 @@
                     <div class="flex flex-wrap items-baseline gap-1.5">
                         @if ($plan['price'])
                             <span class="text-[40px] font-bold tracking-tightest">{{ $plan['price'] }}</span>
-                            <span class="text-sm">/ student / term</span>
+                            <span class="text-sm">/ term</span>
                         @else
                             <span class="text-[34px] font-bold tracking-[-0.03em]">Get a quote</span>
-                            <span @class(['text-sm', 'text-ink-300' => $featured, 'text-muted' => ! $featured])>priced per student, per term</span>
                         @endif
                     </div>
+                    <p class="m-0 text-sm {{ $featured ? 'text-ink-300' : 'text-muted' }}">{{ $plan['seats'] }}@if ($plan['per_student']) · or {{ $plan['per_student'] }}/student @endif</p>
                     <p class="m-0 text-[15px] leading-[1.55]">{{ $plan['description'] }}</p>
                     <a
-                        href="{{ $plan['cta'] === 'Contact sales' ? route('contact', ['kind' => 'question']) : '#cta' }}"
+                        href="{{ $plan['cta'] === 'Contact sales' ? route('contact', ['kind' => 'question']) : route('signup') }}"
                         @class([
                             'rounded-xl p-[13px] text-center text-[15px] font-semibold transition',
                             'bg-brand-600 text-white hover:bg-brand-700' => $featured,

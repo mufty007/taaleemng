@@ -4,10 +4,10 @@ import Alpine from 'alpinejs';
  * In-app navigation without full page reloads.
  *
  * Inside the signed-in app (any page whose body holds [data-app-shell]),
- * same-origin links and forms are fetched in the background and only the
- * <body> is swapped. The address bar, history (back/forward), scroll position,
- * page title and CSRF token are kept in step, and Alpine and page motion are
- * restarted on the new content. Anything unusual falls back to a normal load:
+ * same-origin links and forms are fetched in the background. When both pages
+ * share the app chrome, only [data-app-main] (and the sidebar nav) are swapped
+ * so the shell does not flash. Hash-only links update the URL in place for the
+ * tabs component — they never fetch. Unusual cases fall back to a normal load:
  *
  *  - links with target, download, data-native or to a different origin
  *  - pages that are not part of the app shell (print views, marketing, errors)
@@ -46,6 +46,38 @@ function finishProgress() {
     }, 500);
 }
 
+function runScripts(root) {
+    root?.querySelectorAll('script').forEach((old) => {
+        const script = document.createElement('script');
+        [...old.attributes].forEach((attribute) => script.setAttribute(attribute.name, attribute.value));
+        script.textContent = old.textContent;
+        old.replaceWith(script);
+    });
+}
+
+function updateChrome(doc) {
+    document.title = doc.title;
+    const token = doc.querySelector('meta[name="csrf-token"]')?.content;
+
+    if (token) {
+        document.querySelector('meta[name="csrf-token"]')?.setAttribute('content', token);
+    }
+}
+
+/**
+ * Same-document hash change: drive the tabs component without fetching.
+ */
+function applyHash(url) {
+    if (url.hash === location.hash) {
+        window.dispatchEvent(new Event('hashchange'));
+
+        return;
+    }
+
+    history.replaceState({ ...(history.state ?? {}), navigation: true }, '', url.pathname + url.search + url.hash);
+    window.dispatchEvent(new Event('hashchange'));
+}
+
 function linkFor(event) {
     const link = event.target.closest('a[href]');
 
@@ -63,26 +95,66 @@ function linkFor(event) {
         return null;
     }
 
-    // Same page, different hash: let the browser (and the tabs component) handle it.
-    if (url.pathname === location.pathname && url.search === location.search && url.hash) {
-        return null;
-    }
-
     return url;
 }
 
 function fetchPage(url, options = {}) {
-    return fetch(url, {
+    const requestUrl = new URL(url.href);
+    requestUrl.hash = '';
+
+    return fetch(requestUrl, {
         credentials: 'same-origin',
         headers: { Accept: 'text/html, application/xhtml+xml', 'X-Navigation': 'swap' },
         ...options,
     });
 }
 
+function syncNav(doc) {
+    const current = document.querySelector('#sidebar-nav');
+    const next = doc.querySelector('#sidebar-nav');
+
+    if (! current || ! next) {
+        return;
+    }
+
+    const top = current.scrollTop;
+    Alpine.destroyTree(current);
+    Alpine.mutateDom(() => current.replaceWith(document.adoptNode(next)));
+    const nav = document.querySelector('#sidebar-nav');
+    runScripts(nav);
+    Alpine.initTree(nav);
+
+    if (nav) {
+        nav.scrollTop = top;
+    }
+}
+
+function syncTabbar(doc) {
+    const current = document.querySelector('[data-app-tabbar]');
+    const next = doc.querySelector('[data-app-tabbar]');
+    const shell = document.querySelector('[data-app-shell-root]');
+
+    if (current && next) {
+        current.replaceWith(document.adoptNode(next));
+    } else if (current && ! next) {
+        current.remove();
+    } else if (! current && next && shell) {
+        shell.appendChild(document.adoptNode(next));
+    }
+}
+
+function syncFlash(doc) {
+    document.querySelectorAll('[data-app-flash]').forEach((element) => element.remove());
+    doc.querySelectorAll('[data-app-flash]').forEach((element) => {
+        document.body.appendChild(document.adoptNode(element));
+        Alpine.initTree(document.body.querySelector('[data-app-flash]:last-of-type'));
+    });
+}
+
 /**
  * Swap in a fetched page. Returns false if it is not an app page, so the caller can fall back.
  */
-async function render(response, { push = true, scroll = 0 } = {}) {
+async function render(response, { push = true, scroll = 0, hash = '' } = {}) {
     const type = response.headers.get('content-type') ?? '';
 
     if (! type.includes('text/html')) {
@@ -97,48 +169,67 @@ async function render(response, { push = true, scroll = 0 } = {}) {
     }
 
     const finalUrl = new URL(response.url);
-    const keepScroll = {};
-    document.querySelectorAll('[data-keep-scroll][id]').forEach((element) => {
-        keepScroll[element.id] = element.scrollTop;
-    });
+
+    if (hash) {
+        finalUrl.hash = hash.startsWith('#') ? hash : `#${hash}`;
+    }
 
     if (push) {
-        history.replaceState({ ...history.state, scroll: window.scrollY }, '');
-        history.pushState({ navigation: true, scroll: 0 }, '', finalUrl.href + (finalUrl.hash || ''));
+        history.replaceState({ ...(history.state ?? {}), navigation: true, scroll: window.scrollY }, '');
+        history.pushState({ navigation: true, scroll: 0 }, '', finalUrl.pathname + finalUrl.search + finalUrl.hash);
+    } else {
+        history.replaceState({ navigation: true, scroll }, '', finalUrl.pathname + finalUrl.search + finalUrl.hash);
     }
 
-    document.title = doc.title;
-    const token = doc.querySelector('meta[name="csrf-token"]')?.content;
+    updateChrome(doc);
 
-    if (token) {
-        document.querySelector('meta[name="csrf-token"]')?.setAttribute('content', token);
+    const currentMain = document.querySelector('[data-app-main]');
+    const nextMain = doc.querySelector('[data-app-main]');
+    const soft = Boolean(currentMain && nextMain && isAppPage(document));
+
+    if (soft) {
+        Alpine.destroyTree(currentMain);
+        Alpine.mutateDom(() => currentMain.replaceWith(document.adoptNode(nextMain)));
+        const main = document.querySelector('[data-app-main]');
+        runScripts(main);
+        Alpine.initTree(main);
+        syncNav(doc);
+        syncTabbar(doc);
+        syncFlash(doc);
+        document.dispatchEvent(new CustomEvent('app:close-sidebar'));
+    } else {
+        const keepScroll = {};
+        document.querySelectorAll('[data-keep-scroll][id]').forEach((element) => {
+            keepScroll[element.id] = element.scrollTop;
+        });
+
+        Alpine.destroyTree(document.body);
+        Alpine.mutateDom(() => {
+            document.body.replaceWith(document.adoptNode(doc.body));
+        });
+        runScripts(document.body);
+        Alpine.initTree(document.body);
+
+        Object.entries(keepScroll).forEach(([id, top]) => {
+            const element = document.getElementById(id);
+
+            if (element) {
+                element.scrollTop = top;
+            }
+        });
     }
 
-    Alpine.destroyTree(document.body);
-    Alpine.mutateDom(() => {
-        document.body.replaceWith(document.adoptNode(doc.body));
-    });
+    const tab = finalUrl.hash.slice(1);
+    const target = tab
+        ? document.getElementById(`panel-${tab}`) || document.getElementById(tab)
+        : null;
 
-    // Inline scripts in the new body do not run when moved; run them.
-    document.body.querySelectorAll('script').forEach((old) => {
-        const script = document.createElement('script');
-        [...old.attributes].forEach((attribute) => script.setAttribute(attribute.name, attribute.value));
-        script.textContent = old.textContent;
-        old.replaceWith(script);
-    });
-
-    Alpine.initTree(document.body);
-
-    Object.entries(keepScroll).forEach(([id, top]) => {
-        const element = document.getElementById(id);
-
-        if (element) {
-            element.scrollTop = top;
-        }
-    });
-
-    const target = finalUrl.hash ? document.getElementById(finalUrl.hash.slice(1)) : null;
-    target ? target.scrollIntoView() : window.scrollTo(0, scroll);
+    if (target) {
+        document.querySelector('[data-app-main]')?.scrollIntoView({ block: 'start' });
+        window.dispatchEvent(new Event('hashchange'));
+    } else {
+        window.scrollTo(0, scroll);
+    }
 
     onAfterSwap();
     document.dispatchEvent(new CustomEvent('app:navigated', { detail: { url: finalUrl.href } }));
@@ -152,12 +243,11 @@ async function visit(url, { push = true, scroll = 0, request = null } = {}) {
     startProgress();
 
     try {
-        const cached = ! request && prefetched.get(url.href);
+        const cached = ! request && prefetched.get(url.href.split('#')[0]);
         prefetched.clear();
         const response = cached ? await cached : await fetchPage(url, { signal: controller.signal, ...(request ?? {}) });
 
-        if (! (await render(response.clone(), { push, scroll }))) {
-            // Not an app page (print view, download, error page): load it normally.
+        if (! (await render(response.clone(), { push, scroll, hash: url.hash }))) {
             if (request && request.method !== 'GET') {
                 document.open();
                 document.write(await response.text());
@@ -179,6 +269,20 @@ function onClick(event) {
     const url = linkFor(event);
 
     if (! url || ! isAppPage(document)) {
+        return;
+    }
+
+    // Same path + query: never fetch — hash links drive the tabs component in place.
+    if (url.pathname === location.pathname && url.search === location.search) {
+        event.preventDefault();
+
+        if (url.hash) {
+            applyHash(url);
+        } else if (location.hash) {
+            history.replaceState({ ...(history.state ?? {}), navigation: true }, '', url.pathname + url.search);
+            window.dispatchEvent(new Event('hashchange'));
+        }
+
         return;
     }
 
@@ -230,11 +334,12 @@ function onHover(event) {
 
     const url = linkFor({ target: link, button: 0, defaultPrevented: false });
 
-    if (! url || prefetched.has(url.href)) {
+    if (! url || url.pathname === location.pathname && url.search === location.search || prefetched.has(url.href.split('#')[0])) {
         return;
     }
 
-    const timer = setTimeout(() => prefetched.set(url.href, fetchPage(url)), 80);
+    const key = url.href.split('#')[0];
+    const timer = setTimeout(() => prefetched.set(key, fetchPage(url)), 80);
     link.addEventListener('mouseleave', () => clearTimeout(timer), { once: true });
 }
 

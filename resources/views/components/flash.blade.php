@@ -14,6 +14,7 @@
 
 @if ($message)
     <div
+        data-app-flash
         x-data="{ open: true }"
         x-show="open"
         x-transition.opacity.duration.200ms

@@ -2,6 +2,7 @@
 
 namespace App\Actions\People;
 
+use App\Actions\Billing\AssertSeatAvailable;
 use App\Actions\Platform\AddSchoolMember;
 use App\Enums\EnrolmentStatus;
 use App\Enums\SchoolRole;
@@ -31,6 +32,7 @@ class EnrolStudent
         private CurrentSchool $currentSchool,
         private SequenceGenerator $sequences,
         private AddSchoolMember $addSchoolMember,
+        private AssertSeatAvailable $assertSeatAvailable,
     ) {}
 
     /**
@@ -44,6 +46,8 @@ class EnrolStudent
         $school = $this->currentSchool->getOrFail();
         $session ??= AcademicSession::current()
             ?? throw ValidationException::withMessages(['class_arm_id' => 'Set up the current session before enrolling students.']);
+
+        $this->assertSeatAvailable->forStudent();
 
         return DB::transaction(function () use ($school, $session, $student, $classArm, $guardian, $password): EnrolmentResult {
             $admittedOn = isset($student['admitted_on']) ? Carbon::parse($student['admitted_on']) : now();

@@ -39,6 +39,38 @@ Alpine.data('shell', () => ({
     sidebar: false,
     rail: store.get('sidebar.rail', false),
 
+    init() {
+        this.closeSidebar = () => {
+            this.sidebar = false;
+        };
+        window.addEventListener('app:close-sidebar', this.closeSidebar);
+        // After the page swap has put back the sidebar's old scroll position.
+        requestAnimationFrame(() => this.revealActive());
+    },
+
+    destroy() {
+        window.removeEventListener('app:close-sidebar', this.closeSidebar);
+    },
+
+    /** Scroll the sidebar (never the page) so the current page's item is in view. */
+    revealActive() {
+        const nav = this.$refs.nav;
+        const active = nav?.querySelector('[aria-current="page"]');
+
+        if (! nav || ! active || nav.scrollHeight <= nav.clientHeight) {
+            return;
+        }
+
+        const navBox = nav.getBoundingClientRect();
+        const box = active.getBoundingClientRect();
+
+        if (box.top >= navBox.top && box.bottom <= navBox.bottom) {
+            return;
+        }
+
+        nav.scrollTop += box.top - navBox.top - (nav.clientHeight - box.height) / 2;
+    },
+
     toggleRail() {
         this.rail = ! this.rail;
         store.set('sidebar.rail', this.rail);
@@ -46,9 +78,9 @@ Alpine.data('shell', () => ({
     },
 }));
 
-/** A sidebar group that folds, remembered per browser. */
-Alpine.data('navGroup', (key) => ({
-    open: store.get(`nav.${key}`, true),
+/** A sidebar group that folds, remembered per browser. It stays open while it holds the current page. */
+Alpine.data('navGroup', (key, hasActive = false) => ({
+    open: hasActive || store.get(`nav.${key}`, true),
 
     toggle() {
         this.open = ! this.open;
@@ -63,28 +95,51 @@ Alpine.data('tabs', (names, initial) => ({
     fade: { start: false, end: false },
 
     init() {
+        this.onHashChange = () => {
+            const name = window.location.hash.slice(1);
+
+            if (! this.names.includes(name) || name === this.tab) {
+                return;
+            }
+
+            this.tab = name;
+            this.$nextTick(() => {
+                this.reveal();
+                this.$root.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        };
+
         this.$nextTick(() => {
+            this.syncFromHash();
             this.reveal();
             this.measure();
         });
 
         // Links elsewhere on the page (e.g. "Edit" pointing at #settings) switch tabs too.
-        window.addEventListener('hashchange', () => {
-            const name = window.location.hash.slice(1);
+        window.addEventListener('hashchange', this.onHashChange);
+    },
 
-            if (this.names.includes(name) && name !== this.tab) {
-                this.tab = name;
-                this.$nextTick(() => {
-                    this.reveal();
-                    this.$root.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                });
-            }
-        });
+    destroy() {
+        window.removeEventListener('hashchange', this.onHashChange);
+    },
+
+    syncFromHash() {
+        const name = window.location.hash.slice(1);
+
+        if (this.names.includes(name)) {
+            this.tab = name;
+        }
     },
 
     select(name) {
+        if (! this.names.includes(name) || name === this.tab) {
+            return;
+        }
+
         this.tab = name;
-        history.replaceState(null, '', `#${name}`);
+        const url = new URL(window.location.href);
+        url.hash = name;
+        history.replaceState({ ...(history.state ?? {}), navigation: true }, '', url.pathname + url.search + url.hash);
         this.$nextTick(() => this.reveal());
     },
 

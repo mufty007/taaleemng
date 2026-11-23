@@ -72,10 +72,20 @@ class ClassArm extends Model
 
     /**
      * "JSS 2A", or "SSS 1 Science A" style names need the level loaded.
+     * A blank arm name is a single class for that level (no A/B).
      */
     public function displayName(): string
     {
         $level = $this->level->short_name;
+
+        // Blank name, or stream name stored for uniqueness in single-class mode.
+        if ($this->name === '' || $this->name === null) {
+            return $this->stream ? "{$level} {$this->stream->name}" : $level;
+        }
+
+        if ($this->relationLoaded('stream') && $this->stream && $this->name === $this->stream->name) {
+            return "{$level} {$this->stream->name}";
+        }
 
         return preg_match('/\d$/', $level) && mb_strlen($this->name) <= 2
             ? "{$level}{$this->name}"

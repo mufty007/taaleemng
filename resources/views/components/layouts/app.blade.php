@@ -37,6 +37,13 @@
     $unreadNotices = $currentSchool !== null && ! $inPlatform
         ? \App\Models\Announcement::query()->visibleTo($user)->whereDoesntHave('reads', fn ($query) => $query->where('user_id', $user->id))->count()
         : 0;
+
+    $membership = $currentSchool !== null && ! $inPlatform
+        ? $user->schools()->where('schools.id', $currentSchool->id)->first()?->membership
+        : null;
+    $roleTour = $membership && blank($membership->onboarding_completed_at)
+        ? \App\Support\Schools\RoleOnboarding::for($user, $currentSchool)
+        : null;
 @endphp
 
 <x-layouts.base :title="$title" data-app-shell>
@@ -48,7 +55,7 @@
         @endif
     </x-slot:head>
 
-    <div x-data="shell" @keydown.escape.window="sidebar = false" class="min-h-screen transition-[padding] duration-200 lg:pl-[272px] lg:rail:pl-[76px]">
+    <div data-app-shell-root x-data="shell" @keydown.escape.window="sidebar = false" class="min-h-screen transition-[padding] duration-200 lg:pl-[272px] lg:rail:pl-[76px]">
 
         {{-- Mobile backdrop --}}
         <div x-show="sidebar" x-transition.opacity x-cloak @click="sidebar = false" class="fixed inset-0 z-40 bg-ink/40 lg:hidden" aria-hidden="true"></div>
@@ -119,12 +126,13 @@
                 @endif
             </div>
 
-            <nav class="flex-1 overflow-y-auto px-3 pb-4" aria-label="Main">
+            <nav id="sidebar-nav" x-ref="nav" data-keep-scroll class="flex-1 overflow-y-auto px-3 pb-4" aria-label="Main">
                 @forelse ($navigation as $group)
                     @php
                         $groupKey = \Illuminate\Support\Str::slug($group['label']);
+                        $groupHasActive = collect($group['items'])->contains('active', true);
                     @endphp
-                    <div x-data="navGroup('{{ $groupKey }}')" class="mt-3 first:mt-1">
+                    <div x-data="navGroup('{{ $groupKey }}', @js($groupHasActive))" class="mt-3 first:mt-1">
                         <button
                             type="button"
                             @click="toggle()"
@@ -307,7 +315,7 @@
             </div>
         </header>
 
-        <main class="mx-auto flex max-w-[1280px] flex-col gap-6 px-4 pt-6 pb-[calc(1.5rem+var(--tabbar-h,0px))] sm:px-6 sm:pt-8 sm:pb-[calc(2rem+var(--tabbar-h,0px))]">
+        <main data-app-main class="mx-auto flex max-w-[1280px] flex-col gap-6 px-4 pt-6 pb-[calc(1.5rem+var(--tabbar-h,0px))] sm:px-6 sm:pt-8 sm:pb-[calc(2rem+var(--tabbar-h,0px))]">
             {{-- Notices from Ta'aleem (platform broadcasts), until they end or are dismissed. --}}
             @foreach ($broadcasts as $broadcast)
                 @php
@@ -335,7 +343,7 @@
 
         {{-- PHONE TAB BAR --}}
         @if ($tabs !== [])
-            <nav class="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden print:hidden" aria-label="Quick">
+            <nav data-app-tabbar class="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden print:hidden" aria-label="Quick">
                 <ul class="m-0 mx-auto flex max-w-lg list-none items-stretch justify-around p-0 px-1">
                     @foreach ($tabs as $tab)
                         <li class="min-w-0 flex-1">
@@ -367,6 +375,31 @@
             </nav>
         @endif
     </div>
+
+    @if ($roleTour)
+        <div
+            x-data="{ open: true }"
+            x-show="open"
+            x-cloak
+            class="fixed inset-0 z-[55] flex items-end justify-center bg-ink/40 p-0 sm:items-center sm:p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="role-tour-title"
+        >
+            <div class="relative w-full max-w-md rounded-t-3xl bg-white p-6 shadow-panel sm:rounded-3xl">
+                <h2 id="role-tour-title" class="m-0 text-xl font-bold tracking-[-0.02em]">{{ $roleTour['title'] }}</h2>
+                <ol class="m-0 mt-4 list-decimal space-y-2 pl-5 text-[15px] text-muted">
+                    @foreach ($roleTour['steps'] as $step)
+                        <li>{{ $step }}</li>
+                    @endforeach
+                </ol>
+                <form method="POST" action="{{ route('school.onboarding.complete') }}" class="mt-6">
+                    @csrf
+                    <x-button variant="brand" class="w-full justify-center">Got it</x-button>
+                </form>
+            </div>
+        </div>
+    @endif
 
     <x-flash />
     <x-confirm-dialog />

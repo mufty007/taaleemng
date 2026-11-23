@@ -13,7 +13,10 @@ use App\Support\Platform\Modules;
 use Illuminate\Support\Facades\Notification;
 
 beforeEach(function () {
-    config(['taaleem.marketing.prices.standard' => '1500']);
+    config([
+        'taaleem.plans.standard.per_student' => '1500',
+        'taaleem.marketing.prices.standard' => '1500',
+    ]);
     $this->admin = User::factory()->platformAdmin()->create();
     $this->school = schoolWithStructure(['slug' => 'greenfield', 'name' => 'Greenfield Academy', 'email' => 'office@greenfield.test']);
     $this->schoolAdmin = memberOf($this->school, SchoolRole::SchoolAdmin, ['email' => 'owner@greenfield.test']);
@@ -22,20 +25,33 @@ beforeEach(function () {
     enrol($this->school, 'JSS 1', 'A');
 });
 
-it('sets a school’s plan and price, and can apply the plan’s modules', function () {
+it('sets a school’s plan, billing model and seat overrides', function () {
     $this->actingAs($this->admin)->put(route('platform.schools.plan', $this->school), [
-        'plan' => 'basic', 'price_per_student' => '1,200', 'billing_cycle' => 'termly', 'apply_modules' => '1',
+        'plan' => 'basic',
+        'billing_model' => 'per_student',
+        'price_per_student' => '1,200',
+        'billing_cycle' => 'termly',
+        'max_students' => 180,
+        'apply_modules' => '1',
     ])->assertRedirect();
 
     $school = $this->school->fresh();
     expect($school->plan)->toBe(Plan::Basic)
+        ->and($school->billing_model->value)->toBe('per_student')
         ->and($school->pricePerStudent())->toBe(1_200_00)
-        ->and($school->hasModule('payroll'))->toBeFalse()
+        ->and($school->max_students)->toBe(180)
+        ->and($school->hasModule('payroll'))->toBeTrue()
         ->and($school->hasModule('classwork'))->toBeTrue();
 });
 
 it('bills active students × price, then sends, records payment, voids and prints', function () {
     Notification::fake();
+
+    $this->actingAs($this->admin)->put(route('platform.schools.plan', $this->school), [
+        'plan' => 'standard',
+        'billing_model' => 'per_student',
+        'billing_cycle' => 'termly',
+    ])->assertRedirect();
 
     $this->actingAs($this->admin)->post(route('platform.schools.invoices.store', $this->school), ['period' => 'First Term 2026/2027', 'due_on' => now()->addDays(14)->toDateString()])->assertRedirect();
 
