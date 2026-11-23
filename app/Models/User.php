@@ -63,7 +63,7 @@ class User extends Authenticatable
         return $this->belongsToMany(School::class)
             ->using(Membership::class)
             ->as('membership')
-            ->withPivot(['id', 'status', 'joined_at', 'last_active_at'])
+            ->withPivot(['id', 'status', 'joined_at', 'last_active_at', 'onboarding_completed_at'])
             ->withTimestamps();
     }
 

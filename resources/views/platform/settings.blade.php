@@ -7,12 +7,23 @@
             'env' => 'From the server’s .env',
             default => 'Not set',
         };
+        $settingsTab = match (true) {
+            $errors->mail->isNotEmpty() || $errors->mailTest->isNotEmpty() => 'email',
+            $errors->paystack->isNotEmpty() => 'paystack',
+            default => 'paystack',
+        };
     @endphp
 
-    <div class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <div class="flex min-w-0 flex-col gap-6">
-            {{-- PAYSTACK --}}
-            <x-card :padding="false" id="paystack" class="overflow-hidden">
+    <form id="paystack-check" method="POST" action="{{ route('platform.settings.paystack.check') }}" class="hidden">@csrf</form>
+    <form id="paystack-forget" method="POST" action="{{ route('platform.settings.paystack') }}" class="hidden" data-confirm="Remove the saved Paystack keys? The server’s .env keys apply again; without them, parents can’t pay online." data-confirm-title="Remove Paystack keys" data-confirm-action="Remove keys">
+        @csrf
+        @method('PUT')
+        <input type="hidden" name="forget" value="1">
+    </form>
+
+    <x-tabs :tabs="['paystack' => 'Paystack', 'email' => 'Email', 'sms' => 'SMS', 'about' => 'About']" :default="$settingsTab" label="Platform settings">
+        <x-tab name="paystack">
+            <x-card :padding="false" class="overflow-hidden">
                 <div class="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
                     <div class="flex items-start gap-3">
                         <span class="grid size-10 flex-none place-items-center rounded-xl bg-sky-50 text-sky"><x-lucide-credit-card class="size-5" aria-hidden="true" /></span>
@@ -76,16 +87,10 @@
                     @endif
                 </dl>
             </x-card>
+        </x-tab>
 
-            <form id="paystack-check" method="POST" action="{{ route('platform.settings.paystack.check') }}" class="hidden">@csrf</form>
-            <form id="paystack-forget" method="POST" action="{{ route('platform.settings.paystack') }}" class="hidden" data-confirm="Remove the saved Paystack keys? The server’s .env keys apply again; without them, parents can’t pay online." data-confirm-title="Remove Paystack keys" data-confirm-action="Remove keys">
-                @csrf
-                @method('PUT')
-                <input type="hidden" name="forget" value="1">
-            </form>
-
-            {{-- EMAIL --}}
-            <x-card :padding="false" id="email" class="overflow-hidden">
+        <x-tab name="email">
+            <x-card :padding="false" class="overflow-hidden">
                 <div class="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4 sm:px-6">
                     <div class="flex items-start gap-3">
                         <span class="grid size-10 flex-none place-items-center rounded-xl bg-brand-50 text-brand-600"><x-lucide-mail class="size-5" aria-hidden="true" /></span>
@@ -121,11 +126,10 @@
                     <x-button variant="secondary" icon="send">Send test</x-button>
                 </form>
             </x-card>
-        </div>
+        </x-tab>
 
-        <aside class="flex min-w-0 flex-col gap-6">
-            {{-- SMS --}}
-            <x-card>
+        <x-tab name="sms">
+            <x-card class="max-w-xl">
                 <div class="flex items-start justify-between gap-3">
                     <span class="grid size-10 flex-none place-items-center rounded-xl bg-chip text-muted"><x-lucide-message-square-text class="size-5" aria-hidden="true" /></span>
                     <x-badge tone="brand">Coming soon</x-badge>
@@ -133,8 +137,10 @@
                 <h2 class="m-0 mt-3 text-lg font-semibold">SMS</h2>
                 <p class="m-0 mt-1 text-sm text-muted">Text message reminders and alerts will be set up here. Until then, schools reach parents by email and WhatsApp.</p>
             </x-card>
+        </x-tab>
 
-            <x-card>
+        <x-tab name="about">
+            <x-card class="max-w-xl">
                 <h2 class="m-0 text-base font-semibold">How these settings work</h2>
                 <ul class="m-0 mt-3 flex list-none flex-col gap-2.5 p-0 text-sm text-muted">
                     <li class="flex gap-2"><x-lucide-lock class="mt-0.5 size-4 flex-none text-naija" aria-hidden="true" /> Secret keys and passwords are encrypted and never shown again.</li>
@@ -142,6 +148,6 @@
                     <li class="flex gap-2"><x-lucide-refresh-cw class="mt-0.5 size-4 flex-none text-sky" aria-hidden="true" /> Saving email settings restarts the background workers so queued emails use them.</li>
                 </ul>
             </x-card>
-        </aside>
-    </div>
+        </x-tab>
+    </x-tabs>
 </x-layouts.app>

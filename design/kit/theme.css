@@ -1,0 +1,148 @@
+/*
+ * Ta’aleem / TaaleemNG extractable theme — Tailwind CSS v4
+ *
+ * Drop into any Vite + Tailwind v4 project:
+ *
+ *   @import 'tailwindcss';
+ *   @import './theme.css';   // or copy this file’s contents into app.css
+ *
+ * Swap brand hexes below to re-skin without changing layout language.
+ * Source of truth in-app: resources/css/app.css
+ */
+
+@theme {
+    --font-sans: 'Outfit', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+
+    /* Primary — periwinkle. Use brand-600 for text on light backgrounds. */
+    --color-brand: #7476f1;
+    --color-brand-50: color-mix(in oklch, #7476f1 10%, white);
+    --color-brand-100: color-mix(in oklch, #7476f1 22%, white);
+    --color-brand-200: #c9cafb;
+    --color-brand-500: #7476f1;
+    --color-brand-600: #5a5cd6;
+    --color-brand-700: #4b4dc2;
+
+    /* Near-black navy — headings, dark panels, default primary buttons */
+    --color-ink: #101828;
+    --color-ink-800: #1a2436;
+    --color-ink-700: #243049;
+    --color-ink-600: #2a3650;
+    --color-ink-300: #c3c9d8;
+    --color-ink-200: #e3e7f0;
+
+    /* Surfaces */
+    --color-canvas: #fafbff;
+    --color-surface: #fbfcff;
+    --color-chip: #f1f2fa;
+    --color-line: #e4e7f2;
+    --color-muted: #566074;
+    --color-placeholder: #7a8296;
+
+    /* Semantic accents */
+    --color-naija: #0b7a4b;
+    --color-naija-700: #0b6b42;
+    --color-naija-50: #ddf3e8;
+
+    --color-gold: #7a5600;
+    --color-gold-50: #fff1cc;
+    --color-gold-200: #ffe7a8;
+
+    --color-sky: #2b5592;
+    --color-sky-50: #e3ecf9;
+    --color-sky-100: #d5e8ff;
+
+    --color-danger: #b42318;
+    --color-danger-50: #ffe3e0;
+
+    --radius-xl: 0.875rem;
+    --radius-2xl: 1.125rem;
+    --radius-3xl: 1.5rem;
+    --radius-4xl: 2.25rem;
+
+    --shadow-float: 0 18px 40px -16px rgb(30 20 80 / 0.3);
+    --shadow-card: 0 10px 30px -12px rgb(30 20 80 / 0.18);
+    --shadow-panel: 0 30px 60px -20px rgb(30 20 80 / 0.25);
+
+    --tracking-tightest: -0.04em;
+    --tracking-kicker: 0.14em;
+}
+
+@layer base {
+    html {
+        -webkit-font-smoothing: antialiased;
+        scroll-behavior: smooth;
+        scroll-padding-top: 5rem;
+    }
+
+    body {
+        @apply bg-canvas text-ink font-sans;
+    }
+
+    ::placeholder {
+        color: var(--color-placeholder);
+    }
+
+    :focus-visible {
+        outline: 2px solid var(--color-brand-600);
+        outline-offset: 2px;
+    }
+
+    [x-cloak] {
+        display: none !important;
+    }
+}
+
+@layer components {
+    .kicker {
+        @apply text-[13px] font-semibold uppercase tracking-kicker text-brand-600;
+    }
+
+    .display-2 {
+        @apply m-0 text-[clamp(34px,4.6vw,56px)] leading-[1.05] font-bold tracking-[-0.035em] text-balance;
+    }
+
+    .field {
+        @apply block w-full rounded-xl border border-line bg-canvas px-3.5 py-3 text-base text-ink transition focus:border-brand-600 focus:bg-white focus:ring-2 focus:ring-brand-100 focus:outline-none;
+    }
+
+    .field-error {
+        @apply border-danger focus:border-danger focus:ring-danger-50;
+    }
+
+    /* Soft white surface used for most interactive containers */
+    .surface-card {
+        @apply rounded-2xl border border-line bg-white;
+    }
+
+    .surface-panel {
+        @apply rounded-3xl border border-line bg-white shadow-panel;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+@media print {
+    html {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    body {
+        background: white !important;
+    }
+
+    .no-print {
+        display: none !important;
+    }
+}

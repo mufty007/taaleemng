@@ -61,7 +61,7 @@ class SettingsController extends Controller
             PlatformSettings::put(['paystack_public_key' => null, 'paystack_secret_key' => null]);
             activity('platform')->log('removed the saved Paystack keys');
 
-            return to_route('platform.settings.edit')->with('status', 'Saved Paystack keys removed. The server’s .env keys apply again, if it has any.');
+            return redirect()->to(route('platform.settings.edit').'#paystack')->with('status', 'Saved Paystack keys removed. The server’s .env keys apply again, if it has any.');
         }
 
         $data = $request->validateWithBag('paystack', [
@@ -82,7 +82,7 @@ class SettingsController extends Controller
         PlatformSettings::put(['paystack_public_key' => $data['public_key'], 'paystack_secret_key' => $secret]);
         activity('platform')->log('updated the Paystack keys ('.(Str::contains((string) $secret, '_live_') ? 'live' : 'test').' mode)');
 
-        return to_route('platform.settings.edit')->with('status', 'Paystack keys saved. Use “Check connection” to confirm Paystack accepts them.');
+        return redirect()->to(route('platform.settings.edit').'#paystack')->with('status', 'Paystack keys saved. Use “Check connection” to confirm Paystack accepts them.');
     }
 
     /**
@@ -131,7 +131,7 @@ class SettingsController extends Controller
         Artisan::call('queue:restart');
         activity('platform')->log('updated the email (SMTP) settings');
 
-        return to_route('platform.settings.edit')->with('status', 'Email settings saved. Send a test email to check them.');
+        return redirect()->to(route('platform.settings.edit').'#email')->with('status', 'Email settings saved. Send a test email to check them.');
     }
 
     public function testMail(Request $request): RedirectResponse

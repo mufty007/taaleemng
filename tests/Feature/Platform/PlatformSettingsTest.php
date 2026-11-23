@@ -25,6 +25,8 @@ it('is for the super admin only, and shows SMS as coming soon', function () {
         ->assertSee('Paystack')
         ->assertSee('Email (SMTP)')
         ->assertSee('Coming soon')
+        ->assertSee('data-tab="paystack"', false)
+        ->assertSee('data-tab="email"', false)
         ->assertSee(route('webhooks.paystack'));
 
     $schoolAdmin = memberOf(schoolWithRoles(), SchoolRole::SchoolAdmin);
@@ -34,7 +36,7 @@ it('is for the super admin only, and shows SMS as coming soon', function () {
 });
 
 it('saves the Paystack keys encrypted and uses them instead of the server’s', function () {
-    $this->actingAs($this->admin)->put(route('platform.settings.paystack'), $this->paystackForm)->assertRedirect(route('platform.settings.edit'));
+    $this->actingAs($this->admin)->put(route('platform.settings.paystack'), $this->paystackForm)->assertRedirect(route('platform.settings.edit').'#paystack');
 
     expect(DB::table('platform_settings')->where('key', 'paystack_secret_key')->value('value'))->not->toContain('sk_test_secret9876');
 
@@ -77,7 +79,7 @@ it('checks that Paystack accepts the secret key', function () {
 });
 
 it('sends every school’s email through the one SMTP account', function () {
-    $this->actingAs($this->admin)->put(route('platform.settings.mail'), $this->mailForm)->assertRedirect(route('platform.settings.edit'));
+    $this->actingAs($this->admin)->put(route('platform.settings.mail'), $this->mailForm)->assertRedirect(route('platform.settings.edit').'#email');
 
     expect(DB::table('platform_settings')->where('key', 'mail_password')->value('value'))->not->toContain('app-password-1');
 

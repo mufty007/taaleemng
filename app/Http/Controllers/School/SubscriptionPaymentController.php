@@ -49,7 +49,7 @@ class SubscriptionPaymentController extends Controller
             $invoice = null;
         }
 
-        return redirect()->route('school.settings.edit')->with('status', match (true) {
+        return redirect()->to(route('school.settings.edit').'#subscription')->with('status', match (true) {
             $invoice?->status->value === 'paid' => 'Thank you. '.Money::format($invoice->amount).' received for '.$invoice->number.'.',
             default => 'We are waiting for Paystack to confirm the payment. It will show here within a few minutes.',
         });

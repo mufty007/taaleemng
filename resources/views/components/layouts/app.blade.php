@@ -378,6 +378,7 @@
 
     @if ($roleTour)
         <div
+            data-app-role-tour
             x-data="{ open: true }"
             x-show="open"
             x-cloak
@@ -393,7 +394,7 @@
                         <li>{{ $step }}</li>
                     @endforeach
                 </ol>
-                <form method="POST" action="{{ route('school.onboarding.complete') }}" class="mt-6">
+                <form method="POST" action="{{ route('school.onboarding.complete') }}" class="mt-6" x-on:submit="open = false">
                     @csrf
                     <x-button variant="brand" class="w-full justify-center">Got it</x-button>
                 </form>

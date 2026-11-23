@@ -233,6 +233,11 @@ class SettingsController extends Controller
 
         activity('school')->performedOn($school)->log('updated school settings');
 
-        return back()->with('status', 'Settings saved.');
+        $tab = (string) $request->input('_tab', 'admissions');
+        if (! in_array($tab, ['subscription', 'admissions', 'payouts', 'numbering', 'classes', 'setup', 'onboarding'], true)) {
+            $tab = 'admissions';
+        }
+
+        return redirect()->to(route('school.settings.edit').'#'.$tab)->with('status', 'Settings saved.');
     }
 }

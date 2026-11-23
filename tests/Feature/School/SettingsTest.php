@@ -11,12 +11,29 @@ beforeEach(function () {
     $this->admin = memberOf($this->school);
 });
 
+/**
+ * @param  array<string, mixed>  $overrides
+ * @return array<string, mixed>
+ */
+function settingsForm(array $overrides = []): array
+{
+    return [
+        'promotion_pass_mark' => 40,
+        'class_structure' => test()->school->class_structure->value,
+        'numbering' => config('taaleem.numbering'),
+        ...$overrides,
+    ];
+}
+
 it('shows settings to school admins and hides them from teachers', function () {
     $this->actingAs($this->admin)
         ->get(route('school.settings.edit', $this->school))
         ->assertOk()
         ->assertSee('Promotion pass mark')
-        ->assertSee('Document numbers');
+        ->assertSee('Document numbers')
+        ->assertSee('Settings sections')
+        ->assertSee('data-tab="subscription"', false)
+        ->assertSee('data-tab="onboarding"', false);
 
     $this->actingAs(staffOf($this->school)->user)
         ->get(route('school.settings.edit', $this->school))
@@ -30,13 +47,14 @@ it('saves admissions, promotion and numbering preferences', function () {
     })->all();
 
     $this->actingAs($this->admin)
-        ->put(route('school.settings.update', $this->school), [
+        ->put(route('school.settings.update', $this->school), settingsForm([
             'admissions_open' => '1',
             'show_positions' => '1',
             'promotion_pass_mark' => '45',
             'numbering' => $patterns,
-        ])
-        ->assertRedirect()
+            '_tab' => 'numbering',
+        ]))
+        ->assertRedirect(route('school.settings.edit', $this->school).'#numbering')
         ->assertSessionHas('status', 'Settings saved.');
 
     inSchool($this->school, function () {
@@ -57,14 +75,14 @@ it('creates a Paystack payout subaccount from the school bank details', function
     $patterns = collect(config('taaleem.numbering'))->all();
 
     $this->actingAs($this->admin)
-        ->put(route('school.settings.update', $this->school), [
-            'promotion_pass_mark' => 40,
+        ->put(route('school.settings.update', $this->school), settingsForm([
             'payout_bank_code' => '058',
             'payout_account_number' => '0123456789',
             'payout_account_name' => 'Greenfield Academy',
             'numbering' => $patterns,
-        ])
-        ->assertRedirect()
+            '_tab' => 'payouts',
+        ]))
+        ->assertRedirect(route('school.settings.edit', $this->school).'#payouts')
         ->assertSessionHasNoErrors();
 
     inSchool($this->school, function () {
@@ -79,10 +97,9 @@ it('refuses numbering patterns without a sequence token', function () {
     $patterns['receipt_no'] = 'RCT/{YY}/FIXED';
 
     $this->actingAs($this->admin)
-        ->put(route('school.settings.update', $this->school), [
-            'promotion_pass_mark' => 40,
+        ->put(route('school.settings.update', $this->school), settingsForm([
             'numbering' => $patterns,
-        ])
+        ]))
         ->assertSessionHasErrors('numbering.receipt_no');
 });
 
@@ -90,9 +107,8 @@ it('does not let a principal without school.manage change settings', function ()
     $principal = memberOf($this->school, SchoolRole::Principal);
 
     $this->actingAs($principal)
-        ->put(route('school.settings.update', $this->school), [
+        ->put(route('school.settings.update', $this->school), settingsForm([
             'promotion_pass_mark' => 50,
-            'numbering' => config('taaleem.numbering'),
-        ])
+        ]))
         ->assertForbidden();
 });

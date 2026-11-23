@@ -32,7 +32,7 @@
     @if ($canRemind && ! $canPayOnline && $rows->isNotEmpty())
         <div class="flex flex-wrap items-start gap-3 rounded-2xl border border-gold-200 bg-gold-50 px-5 py-4 text-sm">
             <x-lucide-info class="mt-0.5 size-5 flex-none text-gold" aria-hidden="true" />
-            <p class="m-0 min-w-0 flex-1 text-ink">Online payment is not switched on yet, so pay links show parents what they owe and how to pay at the school. @can('school.manage')<a href="{{ route('school.settings.edit') }}" class="font-semibold text-brand-600 hover:text-ink">Set up payouts in Settings</a> so they can pay by card, transfer or USSD.@endcan</p>
+            <p class="m-0 min-w-0 flex-1 text-ink">Online payment is not switched on yet, so pay links show parents what they owe and how to pay at the school. @can('school.manage')<a href="{{ route('school.settings.edit') }}#payouts" class="font-semibold text-brand-600 hover:text-ink">Set up payouts in Settings</a> so they can pay by card, transfer or USSD.@endcan</p>
         </div>
     @endif
 

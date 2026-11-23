@@ -152,6 +152,25 @@ function syncFlash(doc) {
 }
 
 /**
+ * Role tour lives outside [data-app-main]. Soft swaps must drop or replace it,
+ * or "Got it" looks broken after the membership is marked complete.
+ */
+function syncRoleTour(doc) {
+    const current = document.querySelector('[data-app-role-tour]');
+    const next = doc.querySelector('[data-app-role-tour]');
+
+    if (current) {
+        Alpine.destroyTree(current);
+        current.remove();
+    }
+
+    if (next) {
+        document.body.appendChild(document.adoptNode(next));
+        Alpine.initTree(document.body.querySelector('[data-app-role-tour]'));
+    }
+}
+
+/**
  * Swap in a fetched page. Returns false if it is not an app page, so the caller can fall back.
  */
 async function render(response, { push = true, scroll = 0, hash = '' } = {}) {
@@ -196,6 +215,7 @@ async function render(response, { push = true, scroll = 0, hash = '' } = {}) {
         syncNav(doc);
         syncTabbar(doc);
         syncFlash(doc);
+        syncRoleTour(doc);
         document.dispatchEvent(new CustomEvent('app:close-sidebar'));
     } else {
         const keepScroll = {};
