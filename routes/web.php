@@ -389,6 +389,7 @@ Route::middleware('auth')->group(function () {
 
             // Billing, plans and modules.
             Route::get('/billing', [Platform\BillingController::class, 'index'])->name('billing.index');
+            Route::put('/billing/plans/{plan}', [Platform\BillingController::class, 'updatePlanDefinition'])->name('billing.plans.update');
             Route::put('/schools/{school:slug}/plan', [Platform\BillingController::class, 'updatePlan'])->name('schools.plan');
             Route::put('/schools/{school:slug}/modules', [Platform\BillingController::class, 'updateModules'])->name('schools.modules');
             Route::post('/schools/{school:slug}/invoices', [Platform\BillingController::class, 'storeInvoice'])->name('schools.invoices.store');

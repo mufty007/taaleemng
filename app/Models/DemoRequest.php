@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 #[Fillable([
     'kind', 'source', 'name', 'email', 'phone', 'school_name', 'student_count',
-    'message', 'ip_address', 'user_agent', 'handled_at',
+    'message', 'notes', 'ip_address', 'user_agent', 'handled_at',
 ])]
 class DemoRequest extends Model
 {
@@ -31,6 +31,20 @@ class DemoRequest extends Model
             'kind' => DemoRequestKind::class,
             'handled_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Where on the marketing site this lead came from.
+     */
+    public function sourceLabel(): string
+    {
+        return match ($this->source) {
+            'hero' => 'Home page (top)',
+            'cta' => 'Home page (bottom)',
+            'contact' => 'Contact page',
+            'signup' => 'Signup page',
+            default => filled($this->source) ? (string) $this->source : 'Website',
+        };
     }
 
     /**

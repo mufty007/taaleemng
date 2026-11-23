@@ -74,6 +74,7 @@ return [
 
     'plans' => [
         'basic' => [
+            'label' => 'Starter',
             'max_students' => (int) env('TAALEEM_STARTER_STUDENTS', 150),
             'max_staff' => (int) env('TAALEEM_STARTER_STAFF', 15),
             'flat_termly' => env('TAALEEM_STARTER_FLAT_TERM') ?: '45000',
@@ -88,6 +89,7 @@ return [
             ],
         ],
         'standard' => [
+            'label' => 'Growth',
             'max_students' => (int) env('TAALEEM_GROWTH_STUDENTS', 500),
             'max_staff' => (int) env('TAALEEM_GROWTH_STAFF', 40),
             'flat_termly' => env('TAALEEM_GROWTH_FLAT_TERM') ?: '95000',
@@ -102,6 +104,7 @@ return [
             ],
         ],
         'premium' => [
+            'label' => 'Campus',
             'max_students' => (int) env('TAALEEM_CAMPUS_STUDENTS', 2000),
             'max_staff' => (int) env('TAALEEM_CAMPUS_STAFF', 120),
             'flat_termly' => env('TAALEEM_CAMPUS_FLAT_TERM') ?: '180000',
@@ -116,6 +119,7 @@ return [
             ],
         ],
         'custom' => [
+            'label' => 'Custom',
             'max_students' => null,
             'max_staff' => null,
             'flat_termly' => null,

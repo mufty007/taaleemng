@@ -18,6 +18,12 @@ enum Plan: string
 
     public function label(): string
     {
+        $saved = config("taaleem.plans.{$this->value}.label");
+
+        if (filled($saved)) {
+            return (string) $saved;
+        }
+
         return match ($this) {
             self::Basic => 'Starter',
             self::Standard => 'Growth',

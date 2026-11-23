@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Platform\CreateSchool;
+use App\Enums\DemoRequestKind;
 use App\Enums\SchoolRole;
 use App\Enums\SchoolStatus;
 use App\Models\DemoRequest;
@@ -107,4 +108,41 @@ it('marks a lead as handled and back again', function () {
 
     $this->actingAs($this->admin)->patch(route('platform.leads.update', $lead))->assertRedirect();
     expect($lead->fresh()->handled_at)->toBeNull();
+});
+
+it('explains where leads come from and lets admins filter, retag and note them', function () {
+    $demo = DemoRequest::factory()->create([
+        'kind' => DemoRequestKind::Demo,
+        'source' => 'hero',
+        'school_name' => 'Sunrise Academy',
+    ]);
+    DemoRequest::factory()->create([
+        'kind' => DemoRequestKind::Question,
+        'source' => 'contact',
+        'school_name' => 'Quiet College',
+        'handled_at' => now(),
+    ]);
+
+    $this->actingAs($this->admin)->get(route('platform.leads.index'))
+        ->assertOk()
+        ->assertSee('How leads arrive')
+        ->assertSee('Home page (top)')
+        ->assertSee('Sunrise Academy')
+        ->assertDontSee('Quiet College');
+
+    $this->actingAs($this->admin)->get(route('platform.leads.index', ['kind' => 'demo', 'source' => 'hero']))
+        ->assertOk()
+        ->assertSee('Sunrise Academy');
+
+    $this->actingAs($this->admin)->patch(route('platform.leads.update', $demo), [
+        'action' => 'kind',
+        'kind' => DemoRequestKind::Trial->value,
+    ])->assertRedirect();
+    expect($demo->fresh()->kind)->toBe(DemoRequestKind::Trial);
+
+    $this->actingAs($this->admin)->patch(route('platform.leads.update', $demo), [
+        'action' => 'notes',
+        'notes' => 'Called the proprietor — interested in Growth.',
+    ])->assertRedirect();
+    expect($demo->fresh()->notes)->toBe('Called the proprietor — interested in Growth.');
 });

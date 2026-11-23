@@ -33,19 +33,78 @@ class BillingController extends Controller
     public function index(): View
     {
         $open = SchoolInvoice::query()->whereIn('status', [SchoolInvoiceStatus::Draft, SchoolInvoiceStatus::Sent]);
-        $payingSchools = SchoolDirectory::query()->where('status', SchoolStatus::Active)->get();
+        $schools = SchoolDirectory::query()->orderBy('name')->get();
+        $payingSchools = $schools->where('status', SchoolStatus::Active);
 
         return view('platform.billing.index', [
             'stats' => [
                 'paidThisMonth' => (int) SchoolInvoice::query()->where('status', SchoolInvoiceStatus::Paid)->where('paid_at', '>=', now()->startOfMonth())->sum('amount'),
                 'outstanding' => (int) (clone $open)->sum('amount'),
                 'overdue' => (int) SchoolInvoice::query()->where('status', SchoolInvoiceStatus::Sent)->whereDate('due_on', '<', today())->sum('amount'),
-                'termly' => (int) $payingSchools->sum(fn (School $school): int => (int) $school->students_count * (int) $school->pricePerStudent()),
+                'termly' => (int) $payingSchools->sum(function (School $school): int {
+                    return (int) (PlanCatalog::invoiceAmount(
+                        $school->plan,
+                        $school->billing_model ?? BillingModel::Flat,
+                        $school->billing_cycle === 'annual' ? 'termly' : ($school->billing_cycle ?: 'termly'),
+                        (int) $school->students_count,
+                        $school->price_per_student,
+                    ) ?? 0);
+                }),
             ],
+            'plans' => PlanCatalog::publicPlans(),
+            'editablePlans' => PlanCatalog::editable(),
             'byPlan' => School::query()->selectRaw('plan, count(*) as total')->groupBy('plan')->pluck('total', 'plan'),
+            'schools' => $schools,
             'openInvoices' => (clone $open)->with('school')->orderBy('due_on')->limit(30)->get(),
             'recentPayments' => SchoolInvoice::query()->where('status', SchoolInvoiceStatus::Paid)->with('school')->latest('paid_at')->limit(8)->get(),
         ]);
+    }
+
+    /**
+     * Edit one plan in the catalog (name, seats, flat and per-student prices).
+     * Existing invoices keep their amounts; the new prices apply on the next bill.
+     */
+    public function updatePlanDefinition(Request $request, string $plan): RedirectResponse
+    {
+        $planEnum = Plan::tryFrom($plan);
+        abort_unless($planEnum !== null, 404);
+
+        $bag = 'plan_'.$planEnum->value;
+        $amount = ['nullable', 'string', 'max:20', 'regex:/^[₦\s\d,]*(\.\d{1,2})?$/u'];
+        $data = $request->validateWithBag($bag, [
+            'label' => ['required', 'string', 'max:40'],
+            'description' => ['nullable', 'string', 'max:255'],
+            'max_students' => ['nullable', 'integer', 'min:1', 'max:100000'],
+            'max_staff' => ['nullable', 'integer', 'min:1', 'max:10000'],
+            'flat_termly' => $amount,
+            'flat_annual' => $amount,
+            'per_student' => $amount,
+            'features' => ['nullable', 'string', 'max:2000'],
+            'notify_schools' => ['sometimes', 'boolean'],
+            'email_admins' => ['sometimes', 'boolean'],
+            'notice_title' => ['nullable', 'string', 'max:120'],
+            'notice_body' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        PlanCatalog::saveOne($planEnum, $data);
+
+        $message = "{$planEnum->label()} saved. New prices apply on each school’s next invoice — open invoices keep the amount they were issued with.";
+
+        if ($request->boolean('notify_schools')) {
+            $title = filled($data['notice_title'] ?? null)
+                ? trim((string) $data['notice_title'])
+                : 'We’re updating Ta’aleem plans';
+            $body = filled($data['notice_body'] ?? null)
+                ? trim((string) $data['notice_body'])
+                : "We’re updating the {$planEnum->label()} plan. Your current invoices stay as they are; the new prices apply on your next bill.";
+
+            PlanCatalog::notifySchools($request->user(), $title, $body, $request->boolean('email_admins'));
+            $message .= ' School admins have been notified.';
+        }
+
+        activity('platform')->log("updated the {$planEnum->label()} plan in the catalog");
+
+        return redirect()->to(route('platform.billing.index').'#plans')->with('status', $message);
     }
 
     public function updatePlan(Request $request, School $school): RedirectResponse

@@ -3,6 +3,7 @@
 namespace App\Support\Platform;
 
 use App\Models\PlatformSetting;
+use App\Support\Billing\PlanCatalog;
 use Illuminate\Database\QueryException;
 use Throwable;
 
@@ -108,6 +109,9 @@ final class PlatformSettings
         if (filled($settings['mail_from_name'] ?? null)) {
             config(['mail.from.name' => $settings['mail_from_name']]);
         }
+
+        // Subscription plan names, seats and prices edited in Billing → Plans.
+        PlanCatalog::applySaved();
     }
 
     /**

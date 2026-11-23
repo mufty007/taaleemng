@@ -9,11 +9,17 @@ use App\Models\User;
 use App\Notifications\PlatformBroadcastNotification;
 use App\Notifications\SchoolInvoiceNotification;
 use App\Support\Finance\FeeStatement;
+use App\Support\Money;
 use App\Support\Platform\Modules;
 use Illuminate\Support\Facades\Notification;
 
 beforeEach(function () {
+    // Reset in-memory plan overlays from earlier tests in this process.
     config([
+        'taaleem.plans.basic.label' => 'Starter',
+        'taaleem.plans.standard.label' => 'Growth',
+        'taaleem.plans.premium.label' => 'Campus',
+        'taaleem.plans.custom.label' => 'Custom',
         'taaleem.plans.standard.per_student' => '1500',
         'taaleem.marketing.prices.standard' => '1500',
     ]);
@@ -23,6 +29,56 @@ beforeEach(function () {
     $this->teacher = staffOf($this->school)->user;
     enrol($this->school, 'JSS 1', 'A');
     enrol($this->school, 'JSS 1', 'A');
+});
+
+it('lets a super admin edit plan names and prices, and applies them on the next invoice only', function () {
+    Notification::fake();
+
+    $this->actingAs($this->admin)->put(route('platform.schools.plan', $this->school), [
+        'plan' => 'standard',
+        'billing_model' => 'per_student',
+        'billing_cycle' => 'termly',
+    ])->assertRedirect();
+
+    $this->actingAs($this->admin)->post(route('platform.schools.invoices.store', $this->school), [
+        'period' => 'First Term 2026/2027',
+        'due_on' => now()->addDays(14)->toDateString(),
+    ])->assertRedirect();
+
+    $existing = SchoolInvoice::query()->sole();
+    expect($existing->amount)->toBe(3_000_00);
+
+    $this->actingAs($this->admin)->put(route('platform.billing.plans.update', 'standard'), [
+        'label' => 'Growth Plus',
+        'description' => 'Updated copy',
+        'max_students' => Plan::Standard->maxStudents(),
+        'max_staff' => Plan::Standard->maxStaff(),
+        'flat_termly' => Plan::Standard->flatPriceTermly() ? Money::toNaira(Plan::Standard->flatPriceTermly()) : null,
+        'flat_annual' => Plan::Standard->flatPriceAnnual() ? Money::toNaira(Plan::Standard->flatPriceAnnual()) : null,
+        'per_student' => '2,000',
+        'features' => "All modules\nPriority support",
+        'notify_schools' => '1',
+        'email_admins' => '1',
+        'notice_title' => 'Plans are changing',
+        'notice_body' => 'New prices start on your next bill.',
+    ])->assertRedirect();
+
+    expect(Plan::Standard->label())->toBe('Growth Plus')
+        ->and(Plan::Standard->defaultPrice())->toBe(2_000_00)
+        ->and($existing->fresh()->amount)->toBe(3_000_00);
+
+    $this->actingAs($this->admin)->post(route('platform.schools.invoices.store', $this->school), [
+        'period' => 'Second Term 2026/2027',
+        'due_on' => now()->addDays(30)->toDateString(),
+    ])->assertRedirect();
+
+    $next = SchoolInvoice::query()->where('period', 'Second Term 2026/2027')->sole();
+    expect($next->amount)->toBe(4_000_00)
+        ->and($next->unit_price)->toBe(2_000_00);
+
+    Notification::assertSentTo($this->schoolAdmin, PlatformBroadcastNotification::class);
+    $this->actingAs($this->schoolAdmin)->get(route('school.dashboard', $this->school))->assertSee('Plans are changing');
+    $this->actingAs($this->admin)->get(route('platform.billing.index'))->assertOk()->assertSee('Growth Plus');
 });
 
 it('sets a school’s plan, billing model and seat overrides', function () {
@@ -68,7 +124,18 @@ it('bills active students × price, then sends, records payment, voids and print
     expect($invoice->fresh()->status)->toBe(SchoolInvoiceStatus::Sent);
 
     $this->actingAs($this->admin)->get(route('platform.school-invoices.print', $invoice))->assertOk()->assertSee($invoice->number)->assertSee('₦3,000');
-    $this->actingAs($this->admin)->get(route('platform.billing.index'))->assertOk()->assertSee('Greenfield Academy')->assertSee('₦3,000');
+    $this->actingAs($this->admin)->get(route('platform.billing.index'))
+        ->assertOk()
+        ->assertSee('Greenfield Academy')
+        ->assertSee('₦3,000')
+        ->assertSee('Starter')
+        ->assertSee('Growth')
+        ->assertSee('Campus')
+        ->assertSee('Plan catalog')
+        ->assertSee('Flat fee / term')
+        ->assertSee('Per student / term')
+        ->assertSee('Edit')
+        ->assertSee('School subscriptions');
 
     $this->actingAs($this->admin)->post(route('platform.school-invoices.paid', $invoice), ['payment_method' => 'Bank transfer', 'payment_reference' => 'GTB-123', 'paid_on' => today()->toDateString()])->assertRedirect();
     expect($invoice->fresh()->status)->toBe(SchoolInvoiceStatus::Paid);
