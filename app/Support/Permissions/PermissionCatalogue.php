@@ -50,6 +50,7 @@ final class PermissionCatalogue
             'Finance' => [
                 'fees.manage' => 'Set fees and generate invoices',
                 'payments.record' => 'Record and confirm payments',
+                'fees.remind' => 'Send fee reminders and payment links to parents',
                 'finance.view' => 'View collections, debtors and cashflow',
                 'expenses.manage' => 'Record and approve expenses',
                 'payroll.manage' => 'Run payroll and issue payslips',
@@ -84,9 +85,9 @@ final class PermissionCatalogue
             )),
             SchoolRole::Principal => [
                 'academics.manage', 'timetable.manage', 'attendance.take', 'attendance.view',
-                'admissions.manage', 'students.view', 'students.view-all', 'students.manage', 'staff.view',
+                'admissions.manage', 'students.view', 'students.view-all', 'students.manage', 'staff.view', 'staff.manage',
                 'scores.enter', 'results.view', 'results.approve', 'results.publish',
-                'cbt.manage', 'finance.view', 'activity.view',
+                'cbt.manage', 'finance.view', 'fees.remind', 'activity.view',
             ],
             SchoolRole::HeadTeacher => [
                 'academics.manage', 'timetable.manage', 'attendance.take', 'attendance.view',
@@ -94,7 +95,7 @@ final class PermissionCatalogue
                 'scores.enter', 'results.view', 'results.approve', 'cbt.manage',
             ],
             SchoolRole::Bursar => [
-                'students.view', 'students.view-all', 'fees.manage', 'payments.record', 'finance.view',
+                'students.view', 'students.view-all', 'fees.manage', 'payments.record', 'fees.remind', 'finance.view',
                 'expenses.manage', 'payroll.manage',
             ],
             SchoolRole::Teacher => [

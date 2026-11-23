@@ -145,7 +145,8 @@ FILESYSTEM_DISK=local
 QUEUE_CONNECTION=database
 CACHE_STORE=database
 
-# Invitations and password resets are emailed: fill these in from your mail provider.
+# Email for every school. Easiest: sign in as the platform admin and set the SMTP account
+# in Platform console > Settings (saved there, it overrides these). Or fill them in here.
 MAIL_MAILER=smtp
 MAIL_HOST=
 MAIL_PORT=587
@@ -162,7 +163,7 @@ TAALEEM_PRICE_BASIC=
 TAALEEM_PRICE_STANDARD=
 TAALEEM_PRICE_PREMIUM=
 
-# Live keys from the Paystack dashboard. Webhook URL: https://$DOMAIN/webhooks/paystack
+# Paystack: set the keys in Platform console > Settings, or here. Webhook URL: https://$DOMAIN/webhooks/paystack
 PAYSTACK_PUBLIC_KEY=
 PAYSTACK_SECRET_KEY=
 ENV
@@ -213,11 +214,11 @@ cat <<NEXT
 Ta'aleem is installed at https://$DOMAIN
 
 Next:
-  1. Fill in MAIL_* and PAYSTACK_* in $APP_DIR/.env, then run:
-       sudo -u $APP_USER bash -c 'cd $APP_DIR && php artisan optimize'
-  2. Create your platform admin (it prints a password once):
+  1. Create your platform admin (it prints a password once):
        sudo -u $APP_USER bash -c 'cd $APP_DIR && php artisan taaleem:admin you@$DOMAIN --name="Your Name"'
-  3. Set the Paystack webhook to https://$DOMAIN/webhooks/paystack
+  2. Sign in at https://$DOMAIN/login, open Platform console > Settings, and add the
+     Paystack keys and the SMTP email account. Use "Check connection" and "Send test".
+  3. In the Paystack dashboard, set the webhook URL to https://$DOMAIN/webhooks/paystack
   4. To ship updates later:  sudo -u $APP_USER bash $APP_DIR/deploy/deploy.sh
 
 Never run db:seed here: that is the demo data, where every password is "password".

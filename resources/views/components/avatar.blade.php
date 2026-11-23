@@ -3,11 +3,7 @@
 
 @php
     $url = $person->photoUrl();
-    $tone = match (true) {
-        ! $person instanceof \App\Models\Student => 'bg-ink text-white',
-        $person->gender === \App\Enums\Gender::Female => 'bg-[#FFD6D2] text-ink',
-        default => 'bg-sky-100 text-ink',
-    };
+    $tone = $person->gender === \App\Enums\Gender::Female ? 'bg-[#FFD6D2] text-ink' : 'bg-sky-100 text-ink';
 @endphp
 
 @if ($url)

@@ -5,9 +5,14 @@ namespace App\Http\Controllers\School;
 use App\Enums\InvoiceStatus;
 use App\Http\Controllers\Controller;
 use App\Models\ClassArm;
+use App\Models\FeeReminder;
+use App\Models\Guardian;
 use App\Models\Invoice;
 use App\Models\Student;
+use App\Models\User;
+use App\Support\Finance\FeeStatement;
 use App\Support\Money;
+use App\Support\Tenancy\CurrentSchool;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -16,11 +21,12 @@ use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * Who owes the school, how much, and since when. Exports to CSV for the bursar.
+ * Who owes the school, how much, and since when, with a reminder (email, WhatsApp
+ * or a pay link) one tap away. Exports to CSV for the bursar.
  */
 class DebtorController extends Controller
 {
-    public function index(Request $request): View|StreamedResponse
+    public function index(Request $request, CurrentSchool $currentSchool): View|StreamedResponse
     {
         $armId = $request->integer('class') ?: null;
 
@@ -53,12 +59,57 @@ class DebtorController extends Controller
             return $this->csv($rows);
         }
 
+        $canRemind = $request->user()->can('fees.remind');
+        $reminders = $canRemind ? $this->reminders($rows, $currentSchool) : collect();
+
         return view('school.debtors.index', [
             'rows' => $rows,
             'total' => $rows->sum('owed'),
+            'canRemind' => $canRemind,
+            'reminders' => $reminders,
+            'remindedThisWeek' => $reminders->filter(fn (array $reminder): bool => $reminder['last']?->created_at->gt(now()->subWeek()) ?? false)->count(),
+            'withEmail' => $rows->filter(fn (array $row): bool => filled($row['student']->guardians->first()?->email))->count(),
+            'canPayOnline' => FeeStatement::canPayOnline(),
             'armId' => $armId,
             'arms' => ClassArm::query()->with('level')->get()->sortBy(fn (ClassArm $arm) => sprintf('%03d-%s', $arm->level->position, $arm->name))->mapWithKeys(fn (ClassArm $arm) => [$arm->id => $arm->displayName()]),
         ]);
+    }
+
+    /**
+     * Per student: the last reminder, a pay link, and a link that opens WhatsApp
+     * on the sender's phone with the message already written. (SMS is coming soon.)
+     *
+     * @param  Collection<int, array{student: Student, owed: int, invoices: int, oldest_due: mixed}>  $rows
+     * @return Collection<int, array{last: ?FeeReminder, link: string, whatsapp: ?string, email: ?string, message: string}>
+     */
+    private function reminders(Collection $rows, CurrentSchool $currentSchool): Collection
+    {
+        $school = $currentSchool->getOrFail();
+        $online = FeeStatement::canPayOnline();
+        $last = FeeReminder::query()
+            ->whereIn('student_id', $rows->map(fn (array $row): int => $row['student']->id))
+            ->with('sender')
+            ->latest()
+            ->latest('id')
+            ->get()
+            ->unique('student_id')
+            ->keyBy('student_id');
+
+        return $rows->mapWithKeys(function (array $row) use ($school, $online, $last): array {
+            /** @var Guardian|null $guardian */
+            $guardian = $row['student']->guardians->first();
+            $link = FeeStatement::linkFor($row['student']);
+            $message = FeeStatement::messageFor($school, $row['student'], $guardian, $row['owed'], $link, $online);
+            $phone = User::normalisePhone($guardian?->phone);
+
+            return [$row['student']->id => [
+                'last' => $last->get($row['student']->id),
+                'link' => $link,
+                'whatsapp' => $phone ? 'https://wa.me/'.ltrim($phone, '+').'?text='.rawurlencode($message) : null,
+                'email' => $guardian?->email,
+                'message' => $message,
+            ]];
+        });
     }
 
     /**

@@ -19,7 +19,7 @@
 
         <footer class="border-t border-line bg-white">
             <div class="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 px-4 py-4 text-sm text-muted sm:px-6">
-                <span>{{ $school->address }}{{ $school->phone ? ' · '.$school->phone : '' }}</span>
+                <span>{{ $school->address }}{{ $school->phone ? ' · '.\App\Models\User::displayPhone($school->phone) : '' }}</span>
                 <a href="{{ route('home') }}" class="inline-flex items-center gap-1.5 hover:text-ink">Powered by <span class="font-semibold text-ink">Ta’aleem</span></a>
             </div>
         </footer>

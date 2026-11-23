@@ -12,6 +12,7 @@ use App\Models\Payment;
 use App\Models\PaymentAllocation;
 use App\Models\SchoolSetting;
 use App\Models\Term;
+use App\Support\Payments\Paystack;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Http;
 
@@ -80,6 +81,19 @@ it('blocks online pay until the school has a payout subaccount', function () {
         ->assertSessionHas('status', fn (string $status) => str_contains($status, 'payouts'));
 });
 
+it('can skip the payout subaccount for local testing, but never in production', function () {
+    inSchool($this->school, fn () => SchoolSetting::store('paystack_subaccount', null));
+    config(['services.paystack.require_subaccount' => false]);
+    ($this->fakePaystack)();
+
+    $this->actingAs($this->parent)->post(route('school.portal.invoices.pay', [$this->school, $this->invoice]))->assertRedirect('https://checkout.paystack.com/abc123');
+    Http::assertSent(fn (HttpRequest $request) => $request->url() === 'https://api.paystack.test/transaction/initialize' && ! isset($request['subaccount']));
+
+    expect(app(Paystack::class)->requiresSubaccount())->toBeFalse();
+    app()->detectEnvironment(fn () => 'production');
+    expect(app(Paystack::class)->requiresSubaccount())->toBeTrue();
+    app()->detectEnvironment(fn () => 'testing');
+});
 
 it('confirms the payment when the parent comes back, after checking with Paystack', function () {
     $payment = ($this->startPayment)();
@@ -133,6 +147,33 @@ it('leaves a payment pending while Paystack is still processing it', function ()
         ->assertSessionHas('status', 'We are waiting for Paystack to confirm your payment. It will show here within a few minutes.');
 
     expect($payment->fresh()->status)->toBe(PaymentStatus::Pending);
+});
+
+it('keeps an opened but unpaid checkout pending, so the parent can still finish paying', function () {
+    $payment = ($this->startPayment)();
+    $this->verifyOverrides = ['status' => 'abandoned'];
+
+    ($this->webhook)($payment->reference)->assertNoContent();
+    expect($payment->fresh()->status)->toBe(PaymentStatus::Pending);
+
+    $this->verifyOverrides = [];
+    ($this->webhook)($payment->reference)->assertNoContent();
+    expect($payment->fresh()->status)->toBe(PaymentStatus::Confirmed)
+        ->and($this->invoice->fresh()->status)->toBe(InvoiceStatus::Paid);
+});
+
+it('confirms a payment that succeeds with another card after a failed attempt', function () {
+    $payment = ($this->startPayment)();
+    $this->verifyOverrides = ['status' => 'failed', 'gateway_response' => 'Declined'];
+
+    ($this->webhook)($payment->reference)->assertNoContent();
+    expect($payment->fresh()->status)->toBe(PaymentStatus::Failed);
+
+    $this->verifyOverrides = [];
+    ($this->webhook)($payment->reference)->assertNoContent();
+    expect($payment->fresh())
+        ->status->toBe(PaymentStatus::Confirmed)
+        ->receipt_no->not->toBeNull();
 });
 
 it('only lets the child’s own parent pay, and only when Paystack is set up', function () {

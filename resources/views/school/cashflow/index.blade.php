@@ -15,7 +15,7 @@
         </x-slot:actions>
     </x-page-header>
 
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3" data-stagger>
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 [&>*:first-child]:col-span-2 sm:[&>*:first-child]:col-span-1" data-stagger>
         <x-stat-card label="Fees in" :value="Money::format($income)" icon="arrow-down-left" tone="naija" hint="Confirmed payments" :href="route('school.payments.index', ['from' => $period->from->toDateString(), 'to' => $period->to->toDateString()])" />
         <x-stat-card label="Spending out" :value="Money::format($spending)" icon="arrow-up-right" tone="danger" hint="Expenses, not counting voided ones" :href="route('school.expenses.index', ['term' => $period->term?->id])" />
         <x-stat-card label="Left over" :value="Money::format($net)" icon="scale" :tone="$net < 0 ? 'danger' : 'brand'" :hint="$income > 0 ? round($spending / $income * 100).'% of fees spent' : null" />

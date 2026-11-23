@@ -19,6 +19,15 @@ class Paystack
     }
 
     /**
+     * Whether a school must have its own payout subaccount before parents can pay it.
+     * Always in production, so a school's fees never settle anywhere but its own bank.
+     */
+    public function requiresSubaccount(): bool
+    {
+        return app()->isProduction() || (bool) config('services.paystack.require_subaccount', true);
+    }
+
+    /**
      * @param  array<string, mixed>  $metadata
      * @return array{authorization_url: string, access_code: string, reference: string}
      */
@@ -72,6 +81,16 @@ class Paystack
     public function verify(string $reference): array
     {
         return (array) $this->client()->get('/transaction/verify/'.rawurlencode($reference))->throw()->json('data');
+    }
+
+    /**
+     * The account's balances; used to check that the secret key works.
+     *
+     * @return list<array{currency: string, balance: int}>
+     */
+    public function balance(): array
+    {
+        return (array) $this->client()->get('/balance')->throw()->json('data');
     }
 
     public function hasValidSignature(string $payload, ?string $signature): bool

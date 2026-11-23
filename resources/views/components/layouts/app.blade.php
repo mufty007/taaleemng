@@ -3,6 +3,7 @@
 @php
     $user = auth()->user();
     $inPlatform = request()->routeIs('platform.*');
+    $viewingAs = \App\Support\Platform\ViewAs::active();
 
     $navigation = match (true) {
         $inPlatform => [[
@@ -10,12 +11,24 @@
             'items' => [
                 ['label' => 'Overview', 'icon' => 'layout-dashboard', 'route' => 'platform.dashboard', 'active' => request()->routeIs('platform.dashboard')],
                 ['label' => 'Schools', 'icon' => 'school', 'route' => 'platform.schools.index', 'active' => request()->routeIs('platform.schools.*')],
+                ['label' => 'Billing', 'icon' => 'receipt', 'route' => 'platform.billing.index', 'active' => request()->routeIs('platform.billing.*')],
+                ['label' => 'Broadcasts', 'icon' => 'radio', 'route' => 'platform.broadcasts.index', 'active' => request()->routeIs('platform.broadcasts.*')],
+                ['label' => 'Users', 'icon' => 'users-round', 'route' => 'platform.users.index', 'active' => request()->routeIs('platform.users.*')],
                 ['label' => 'Leads', 'icon' => 'inbox', 'route' => 'platform.leads.index', 'active' => request()->routeIs('platform.leads.*')],
+                ['label' => 'Health', 'icon' => 'activity', 'route' => 'platform.health', 'active' => request()->routeIs('platform.health*')],
+                ['label' => 'Audit log', 'icon' => 'scroll-text', 'route' => 'platform.audit', 'active' => request()->routeIs('platform.audit')],
+                ['label' => 'Settings', 'icon' => 'settings', 'route' => 'platform.settings.edit', 'active' => request()->routeIs('platform.settings.*')],
             ],
         ]],
         $currentSchool !== null => \App\Support\Navigation\SchoolNavigation::for($user),
         default => [],
     };
+
+    // Notices from Ta'aleem for this person in this school.
+    $broadcasts = $currentSchool !== null && ! $inPlatform ? \App\Models\PlatformBroadcast::forViewer($user, $currentSchool) : collect();
+
+    // Phones get a tab bar along the bottom for the pages this role opens most.
+    $tabs = $currentSchool !== null && ! $inPlatform ? \App\Support\Navigation\SchoolNavigation::tabs($user) : [];
 
     // The bell: the latest notices meant for this person, and how many they haven't opened.
     $notices = $currentSchool !== null && ! $inPlatform
@@ -29,6 +42,10 @@
 <x-layouts.base :title="$title" data-app-shell>
     <x-slot:head>
         <script>try { if (JSON.parse(localStorage.getItem('sidebar.rail'))) document.documentElement.classList.add('sidebar-rail'); } catch (e) {}</script>
+        @if ($tabs !== [])
+            {{-- Toasts and the page end sit above the phone tab bar. --}}
+            <style>@media (max-width: 1023.98px) { :root { --tabbar-h: calc(4.25rem + env(safe-area-inset-bottom)); } }</style>
+        @endif
     </x-slot:head>
 
     <div x-data="shell" @keydown.escape.window="sidebar = false" class="min-h-screen transition-[padding] duration-200 lg:pl-[272px] lg:rail:pl-[76px]">
@@ -104,7 +121,9 @@
 
             <nav class="flex-1 overflow-y-auto px-3 pb-4" aria-label="Main">
                 @forelse ($navigation as $group)
-                    @php($groupKey = \Illuminate\Support\Str::slug($group['label']))
+                    @php
+                        $groupKey = \Illuminate\Support\Str::slug($group['label']);
+                    @endphp
                     <div x-data="navGroup('{{ $groupKey }}')" class="mt-3 first:mt-1">
                         <button
                             type="button"
@@ -175,6 +194,24 @@
 
         {{-- TOPBAR --}}
         <header class="sticky top-0 z-30 border-b border-line bg-canvas/85 backdrop-blur-md">
+            @if ($viewingAs)
+                {{-- A super admin seeing the school through someone else's eyes. --}}
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 bg-danger px-4 py-2 text-sm text-white sm:px-6" role="status">
+                    <x-lucide-eye class="size-4 flex-none" aria-hidden="true" />
+                    <span class="min-w-0 flex-1"><strong class="font-semibold">Viewing as {{ \App\Support\Platform\ViewAs::describe($user) }}</strong><span class="hidden sm:inline"> · their account settings and chats stay closed</span></span>
+                    <form method="POST" action="{{ route('view-as.stop') }}">
+                        @csrf
+                        <button type="submit" class="rounded-lg bg-white/15 px-3 py-1 text-xs font-semibold text-white hover:bg-white/25">Stop viewing</button>
+                    </form>
+                </div>
+            @elseif ($currentSchool && ! $inPlatform && $user->is_platform_admin)
+                {{-- Support mode: a super admin inside a school, with a school admin's reach. --}}
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 bg-gold-50 px-4 py-2 text-sm text-ink ring-1 ring-gold-200 sm:px-6" role="status">
+                    <x-lucide-life-buoy class="size-4 flex-none text-gold" aria-hidden="true" />
+                    <span class="min-w-0 flex-1"><strong class="font-semibold">Support mode</strong> · {{ $currentSchool->name }}<span class="hidden sm:inline"> · you can do anything a school admin can, and it is logged</span></span>
+                    <a href="{{ route('platform.schools.show', $currentSchool) }}" class="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-ink ring-1 ring-gold-200 hover:bg-gold-50">Back to console</a>
+                </div>
+            @endif
             <div class="flex items-center gap-3 px-4 py-3 sm:px-6">
                 <button type="button" class="grid size-10 place-items-center rounded-xl text-ink hover:bg-chip lg:hidden" @click="sidebar = true" aria-controls="sidebar" :aria-expanded="sidebar.toString()" aria-label="Open menu">
                     <x-lucide-menu class="size-5" aria-hidden="true" />
@@ -217,7 +254,9 @@
                                 </div>
                                 <ul class="m-0 max-h-96 list-none overflow-y-auto p-1.5">
                                     @forelse ($notices as $notice)
-                                        @php($unread = $notice->reads->isEmpty())
+                                        @php
+                                            $unread = $notice->reads->isEmpty();
+                                        @endphp
                                         <li>
                                             <a href="{{ route('school.announcements.show', $notice) }}" class="flex gap-3 rounded-lg px-2.5 py-2 hover:bg-chip">
                                                 <span @class(['mt-1.5 size-2 flex-none rounded-full', 'bg-brand-600' => $unread, 'bg-transparent' => ! $unread]) aria-hidden="true"></span>
@@ -268,9 +307,65 @@
             </div>
         </header>
 
-        <main class="mx-auto flex max-w-[1280px] flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
+        <main class="mx-auto flex max-w-[1280px] flex-col gap-6 px-4 pt-6 pb-[calc(1.5rem+var(--tabbar-h,0px))] sm:px-6 sm:pt-8 sm:pb-[calc(2rem+var(--tabbar-h,0px))]">
+            {{-- Notices from Ta'aleem (platform broadcasts), until they end or are dismissed. --}}
+            @foreach ($broadcasts as $broadcast)
+                @php
+                    [$box, $icon] = match ($broadcast->level) {
+                        \App\Enums\BroadcastLevel::Critical => ['border-danger/30 bg-danger-50', 'text-danger'],
+                        \App\Enums\BroadcastLevel::Warning => ['border-gold-200 bg-gold-50', 'text-gold'],
+                        default => ['border-brand-200 bg-brand-50', 'text-brand-600'],
+                    };
+                @endphp
+                <div x-data="{ open: true }" x-show="open" x-collapse class="flex items-start gap-3 rounded-2xl border px-4 py-3 {{ $box }}" role="status">
+                    <x-lucide-radio class="mt-0.5 size-5 flex-none {{ $icon }}" aria-hidden="true" />
+                    <div class="min-w-0 flex-1 text-sm">
+                        <p class="m-0 font-semibold">{{ $broadcast->title }} <span class="font-normal text-muted">· from Ta’aleem</span></p>
+                        <p class="m-0 mt-0.5 whitespace-pre-line text-ink">{{ $broadcast->body }}</p>
+                    </div>
+                    <form method="POST" action="{{ route('school.broadcasts.dismiss', $broadcast) }}" x-on:submit.prevent="open = false; fetch($el.action, { method: 'POST', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content, Accept: 'application/json' } })">
+                        @csrf
+                        <button type="submit" class="grid size-8 place-items-center rounded-lg text-muted hover:bg-white/60 hover:text-ink" aria-label="Dismiss “{{ $broadcast->title }}”"><x-lucide-x class="size-4" aria-hidden="true" /></button>
+                    </form>
+                </div>
+            @endforeach
+
             {{ $slot }}
         </main>
+
+        {{-- PHONE TAB BAR --}}
+        @if ($tabs !== [])
+            <nav class="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden print:hidden" aria-label="Quick">
+                <ul class="m-0 mx-auto flex max-w-lg list-none items-stretch justify-around p-0 px-1">
+                    @foreach ($tabs as $tab)
+                        <li class="min-w-0 flex-1">
+                            <a
+                                href="{{ route($tab['route']) }}"
+                                @if ($tab['active']) aria-current="page" @endif
+                                @class([
+                                    'flex h-[4.25rem] flex-col items-center justify-center gap-1 px-1 text-[11px] font-semibold transition',
+                                    'text-brand-600' => $tab['active'],
+                                    'text-muted hover:text-ink' => ! $tab['active'],
+                                ])
+                            >
+                                <span @class(['grid h-7 w-12 place-items-center rounded-full transition', 'bg-brand-50' => $tab['active']])>
+                                    <x-dynamic-component :component="'lucide-'.$tab['icon']" class="size-5" aria-hidden="true" />
+                                </span>
+                                <span class="max-w-full truncate">{{ $tab['label'] }}</span>
+                            </a>
+                        </li>
+                    @endforeach
+                    <li class="min-w-0 flex-1">
+                        <button type="button" @click="sidebar = true" aria-controls="sidebar" :aria-expanded="sidebar.toString()" class="flex h-[4.25rem] w-full flex-col items-center justify-center gap-1 px-1 text-[11px] font-semibold text-muted transition hover:text-ink">
+                            <span class="grid h-7 w-12 place-items-center rounded-full">
+                                <x-lucide-layout-grid class="size-5" aria-hidden="true" />
+                            </span>
+                            <span>Menu</span>
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+        @endif
     </div>
 
     <x-flash />

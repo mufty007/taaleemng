@@ -23,7 +23,7 @@
         </x-slot:actions>
     </x-page-header>
 
-    <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Term summary">
+    <section class="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4" aria-label="Term summary">
         <x-stat-card label="Billed" :value="Money::format($summary['billed'])" :hint="number_format($summary['invoices']).' invoices'" icon="receipt" />
         <x-stat-card label="Collected" :value="Money::format($summary['collected'])" :hint="$rate.'% of what was billed'" icon="banknote-arrow-down" tone="naija" />
         <x-stat-card label="Outstanding" :value="Money::format($outstanding)" :hint="($statusCounts['unpaid'] ?? 0).' unpaid · '.($statusCounts['part_paid'] ?? 0).' part paid'" icon="hand-coins" tone="gold" />

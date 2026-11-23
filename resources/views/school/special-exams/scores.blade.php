@@ -74,7 +74,7 @@
                         </tbody>
                     </table>
                 </div>
-                <div class="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-white/95 px-5 py-3 backdrop-blur">
+                <div class="sticky bottom-[var(--tabbar-h,0px)] flex flex-wrap items-center justify-between gap-3 border-t border-line bg-white/95 px-5 py-3 backdrop-blur">
                     <span class="text-sm text-muted">{{ $rows->count() }} {{ Str::plural('candidate', $rows->count()) }}{{ $class ? ' in '.$class : '' }}</span>
                     <x-button variant="brand" icon="check">Save marks</x-button>
                 </div>

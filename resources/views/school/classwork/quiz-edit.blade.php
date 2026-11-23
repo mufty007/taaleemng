@@ -76,7 +76,7 @@
 
         <div x-show="! questions.length" class="rounded-2xl border border-dashed border-line bg-white px-6 py-10 text-center text-muted">No questions yet. Add the first one below.</div>
 
-        <div class="sticky bottom-4 z-10 flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-white/95 p-3 shadow-card backdrop-blur" x-show="! locked">
+        <div class="sticky bottom-[calc(1rem+var(--tabbar-h,0px))] z-10 flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-white/95 p-3 shadow-card backdrop-blur" x-show="! locked">
             <x-button variant="secondary" size="sm" icon="list-checks" type="button" x-on:click="add('single')">Multiple choice</x-button>
             <x-button variant="secondary" size="sm" icon="circle-help" type="button" x-on:click="add('true_false')">True / false</x-button>
             <x-button variant="secondary" size="sm" icon="pencil" type="button" x-on:click="add('short')">Short answer</x-button>

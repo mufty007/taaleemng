@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\School;
 
 use App\Enums\MembershipStatus;
+use App\Enums\SchoolInvoiceStatus;
 use App\Enums\SchoolRole;
 use App\Enums\StaffStatus;
 use App\Enums\StudentStatus;
@@ -13,15 +14,19 @@ use App\Models\ClassArm;
 use App\Models\ClassSubject;
 use App\Models\Enrolment;
 use App\Models\Guardian;
+use App\Models\InventoryItem;
+use App\Models\SchoolInvoice;
 use App\Models\Staff;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\Term;
 use App\Models\User;
 use App\Support\Dashboard\SchoolPulse;
+use App\Support\Dashboard\StorePulse;
 use App\Support\Dashboard\TeacherDay;
 use App\Support\Finance\CashflowPeriod;
 use App\Support\Money;
+use App\Support\Schools\SetupChecklist;
 use App\Support\Tenancy\CurrentSchool;
 use App\Support\Timetable\Timetable;
 use Illuminate\Contracts\View\View;
@@ -34,7 +39,7 @@ use Spatie\Activitylog\Models\Activity;
 /**
  * The first page after signing in. Each role sees what needs doing first,
  * then its numbers: the office sees the whole school, the bursar the money,
- * a teacher their own classes and marking.
+ * a teacher their own classes and marking, the store keeper the stock.
  */
 class DashboardController extends Controller
 {
@@ -55,6 +60,7 @@ class DashboardController extends Controller
         $staff = $user->staffRecord();
         $mode = match (true) {
             ! $user->can('students.view-all') && $staff !== null => 'teacher',
+            $user->can('inventory.manage') && ! $user->can('academics.manage') && ! $user->can('finance.view') => 'store',
             $user->can('finance.view') && ! $user->can('academics.manage') => 'bursar',
             default => 'office',
         };
@@ -84,11 +90,15 @@ class DashboardController extends Controller
                 ->noticeBoardOrder()
                 ->limit(5)
                 ->get(),
-            'setupSteps' => $this->setupSteps($school->address, $school->phone, $session, $classCount, $studentCount, $staffCount),
+            'setupSteps' => SetupChecklist::steps($school->address, $school->phone, $session, $classCount, $studentCount, $staffCount),
         ];
 
         if ($mode === 'teacher' && $teacherDay) {
             return view('school.dashboard', [...$data, ...$this->teacher($teacherDay, $session)]);
+        }
+
+        if ($mode === 'store') {
+            return view('school.dashboard', [...$data, ...$this->store(new StorePulse($term), $session)]);
         }
 
         $today = $user->can('attendance.view') ? $pulse->attendanceToday() : null;
@@ -98,7 +108,7 @@ class DashboardController extends Controller
 
         return view('school.dashboard', [
             ...$data,
-            'stats' => $mode === 'bursar' ? $this->bursarStats($fees) : $this->officeStats($studentCount, $staffCount, $session, $today, $fees, $results),
+            'stats' => $mode === 'bursar' ? $this->bursarStats($fees) : $this->officeStats($studentCount, $staffCount, $session, $today, $fees, $results, $admissions),
             'attention' => $this->officeAttention($user, $today, $fees, $results, $admissions, $term),
             'today' => $today,
             'trend' => $today ? $pulse->attendanceTrend() : collect(),
@@ -204,7 +214,7 @@ class DashboardController extends Controller
         if ($results && $results['unscored']->isNotEmpty() && ($term?->weekOf(now()) ?? 0) >= 4) {
             $attention[] = [
                 'tone' => 'sky', 'icon' => 'file-pen-line',
-                'title' => $results['unscored']->count().' class '.Str::plural('subject', $results['unscored']->count()).' have no scores yet this term',
+                'title' => $results['unscored']->count().' class '.Str::plural('subject', $results['unscored']->count()).' '.($results['unscored']->count() === 1 ? 'has' : 'have').' no scores yet this term',
                 'body' => $results['unscored']->take(3)->map(fn (ClassSubject $classSubject) => $classSubject->subject->name.' '.$classSubject->classArm->displayName().($classSubject->teacher ? ' ('.$classSubject->teacher->fullName().')' : ''))->join(' · '),
                 'url' => route('school.results.index'),
             ];
@@ -217,6 +227,37 @@ class DashboardController extends Controller
                 'body' => 'See who owes, call or text parents, and record payments as they come in.',
                 'url' => route('school.debtors.index'),
             ];
+        }
+
+        if ($user->can('school.manage') && ! $user->is_platform_admin) {
+            $overdue = SchoolInvoice::query()
+                ->where('school_id', app(CurrentSchool::class)->id())
+                ->where('status', SchoolInvoiceStatus::Sent)
+                ->whereDate('due_on', '<', today())
+                ->orderBy('due_on')
+                ->first();
+
+            if ($overdue) {
+                $attention[] = [
+                    'tone' => 'danger', 'icon' => 'receipt',
+                    'title' => 'Your Ta’aleem invoice '.$overdue->number.' is overdue',
+                    'body' => Money::format($overdue->amount).' for '.$overdue->period.', due '.$overdue->due_on->format('j M Y').'. Pay to keep the school’s access.',
+                    'url' => route('school.settings.edit'),
+                ];
+            }
+        }
+
+        if ($user->can('inventory.manage')) {
+            $low = InventoryItem::query()->active()->lowStock()->count();
+
+            if ($low > 0) {
+                $attention[] = [
+                    'tone' => 'gold', 'icon' => 'package',
+                    'title' => $low.' store '.Str::plural('item', $low).' low on stock',
+                    'body' => 'Reorder before parents come to buy uniforms and books.',
+                    'url' => route('school.inventory.index', ['low' => 1]),
+                ];
+            }
         }
 
         if ($user->can('students.manage')) {
@@ -239,9 +280,10 @@ class DashboardController extends Controller
      * @param  array<string, mixed>|null  $today
      * @param  array<string, mixed>|null  $fees
      * @param  array<string, mixed>|null  $results
+     * @param  array<string, int>|null  $admissions
      * @return list<array{label: string, value: string, hint: ?string, icon: string, tone: string, url?: string}>
      */
-    private function officeStats(int $studentCount, int $staffCount, ?AcademicSession $session, ?array $today, ?array $fees, ?array $results): array
+    private function officeStats(int $studentCount, int $staffCount, ?AcademicSession $session, ?array $today, ?array $fees, ?array $results, ?array $admissions = null): array
     {
         return array_values(array_filter([
             ['label' => 'Students', 'value' => number_format($studentCount), 'hint' => $session ? "Enrolled in {$session->name}" : 'No session yet', 'icon' => 'graduation-cap', 'tone' => 'brand', 'url' => route('school.students.index')],
@@ -249,10 +291,17 @@ class DashboardController extends Controller
                 'label' => 'In school today', 'value' => $today['rate'] !== null ? $today['rate'].'%' : '—', 'icon' => 'clipboard-check', 'tone' => 'naija', 'url' => route('school.attendance.index'),
                 'hint' => $today['open'] ? $today['taken'].' of '.$today['classes'].' registers taken · '.$today['absent'].' absent' : 'No school today',
             ] : ['label' => 'Staff', 'value' => number_format($staffCount), 'hint' => 'Active staff', 'icon' => 'briefcase', 'tone' => 'naija'],
-            $fees ? [
-                'label' => 'Fees collected this term', 'value' => Money::format($fees['collected']), 'icon' => 'banknote-arrow-down', 'tone' => 'gold', 'url' => route('school.payments.index'),
-                'hint' => $fees['rate'] !== null ? $fees['rate'].'% of '.Money::format($fees['billed']).' billed' : 'No invoices yet',
-            ] : null,
+            match (true) {
+                $fees !== null => [
+                    'label' => 'Fees collected this term', 'value' => Money::format($fees['collected']), 'icon' => 'banknote-arrow-down', 'tone' => 'gold', 'url' => route('school.payments.index'),
+                    'hint' => $fees['rate'] !== null ? $fees['rate'].'% of '.Money::format($fees['billed']).' billed' : 'No invoices yet',
+                ],
+                $admissions !== null => [
+                    'label' => 'New applications', 'value' => number_format($admissions['new']), 'icon' => 'user-plus', 'tone' => 'gold', 'url' => route('school.admissions.index'),
+                    'hint' => $admissions['exam'].' sitting the exam · '.$admissions['offered'].' offered',
+                ],
+                default => null,
+            },
             $results ? [
                 'label' => 'Scores entered', 'value' => $results['rate'] !== null ? $results['rate'].'%' : '—', 'icon' => 'file-pen-line', 'tone' => 'sky', 'url' => route('school.results.index'),
                 'hint' => $results['scored'].' of '.$results['subjects'].' class subjects · '.$results['published'].' classes published',
@@ -287,6 +336,60 @@ class DashboardController extends Controller
     }
 
     /**
+     * The store keeper's day: stock value, what is running low, what went out today,
+     * and a quick way to record a sale or issue at the counter.
+     *
+     * @return array<string, mixed>
+     */
+    private function store(StorePulse $pulse, ?AcademicSession $session): array
+    {
+        $stock = $pulse->stock();
+        $today = $pulse->day();
+        $lowStock = $pulse->lowStock();
+        $attention = [];
+
+        if ($stock['out'] > 0) {
+            $attention[] = [
+                'tone' => 'danger', 'icon' => 'package-x',
+                'title' => $stock['out'].' '.Str::plural('item', $stock['out']).' out of stock',
+                'body' => 'Students can’t buy or collect these until you receive more.',
+                'url' => route('school.inventory.index', ['low' => 1]),
+            ];
+        }
+
+        if ($stock['low'] > $stock['out']) {
+            $running = $stock['low'] - $stock['out'];
+            $attention[] = [
+                'tone' => 'gold', 'icon' => 'triangle-alert',
+                'title' => $running.' '.Str::plural('item', $running).' running low',
+                'body' => $lowStock->where('quantity_on_hand', '>', 0)->take(3)->map(fn (InventoryItem $item): string => "{$item->name} ({$item->quantity_on_hand} left)")->join(' · '),
+                'url' => route('school.inventory.index', ['low' => 1]),
+            ];
+        }
+
+        return [
+            'stats' => [
+                ['label' => 'Stock value', 'value' => Money::format($stock['value']), 'hint' => number_format($stock['items']).' items in the store, at cost', 'icon' => 'package', 'tone' => 'brand', 'url' => route('school.inventory.index')],
+                ['label' => 'Sold today', 'value' => Money::format($today['salesValue']), 'hint' => $today['sales'].' '.Str::plural('sale', $today['sales']).' · '.$today['sold'].' '.Str::plural('unit', $today['sold']), 'icon' => 'shopping-bag', 'tone' => 'naija'],
+                ['label' => 'Issued today', 'value' => number_format($today['issued']), 'hint' => $today['received'] > 0 ? $today['received'].' received today' : 'Units given out free', 'icon' => 'hand-helping', 'tone' => 'sky'],
+                ['label' => 'Low stock', 'value' => number_format($stock['low']), 'hint' => $stock['out'] > 0 ? $stock['out'].' out of stock' : 'At or below reorder level', 'icon' => 'triangle-alert', 'tone' => $stock['out'] > 0 ? 'danger' : 'gold', 'url' => route('school.inventory.index', ['low' => 1])],
+            ],
+            'attention' => $attention,
+            'lowStock' => $lowStock,
+            'outTrend' => $pulse->outTrend(),
+            'recentMovements' => $pulse->recent(),
+            'termSales' => $pulse->termSales(),
+            'storeItems' => InventoryItem::query()->active()->orderBy('name')->get(['id', 'ulid', 'name', 'unit', 'quantity_on_hand']),
+            'buyers' => Enrolment::query()
+                ->where('academic_session_id', $session?->id)
+                ->with(['student:id,first_name,middle_name,last_name,admission_no', 'classArm.level'])
+                ->get()
+                ->sortBy(fn (Enrolment $enrolment): string => sprintf('%03d-%s-%s', $enrolment->classArm->level->position, $enrolment->classArm->name, $enrolment->student->last_name))
+                ->groupBy(fn (Enrolment $enrolment): string => $enrolment->classArm->displayName()),
+        ];
+    }
+
+    /**
      * A teacher's own numbers rather than the whole school's.
      *
      * @return list<array{label: string, value: string, hint: string, icon: string, tone: string}>
@@ -303,20 +406,6 @@ class DashboardController extends Controller
             ['label' => 'Classes I teach', 'value' => (string) count($armIds), 'hint' => $subjects->count().' class subjects', 'icon' => 'layers', 'tone' => 'sky'],
             ['label' => 'Subjects', 'value' => (string) $subjects->pluck('subject_id')->unique()->count(), 'hint' => $subjects->pluck('subject.name')->unique()->take(2)->join(', ') ?: 'None assigned yet', 'icon' => 'book-open', 'tone' => 'naija'],
             ['label' => 'Form class', 'value' => $formClass?->displayName() ?? '—', 'hint' => $formClass ? 'You mark its register' : 'Not a form teacher', 'icon' => 'users', 'tone' => 'gold'],
-        ];
-    }
-
-    /**
-     * @return list<array{title: string, body: string, icon: string, done: bool, route: string}>
-     */
-    private function setupSteps(?string $address, ?string $phone, ?AcademicSession $session, int $classCount, int $studentCount, int $staffCount): array
-    {
-        return [
-            ['title' => 'Add your school details', 'body' => 'Logo, motto, address and phone for report cards, receipts and ID cards.', 'icon' => 'school', 'done' => filled($address) && filled($phone), 'route' => 'school.profile.edit'],
-            ['title' => 'Set up the session and terms', 'body' => 'Create the session with First, Second and Third Term dates.', 'icon' => 'calendar-range', 'done' => $session !== null, 'route' => 'school.sessions.index'],
-            ['title' => 'Create classes and subjects', 'body' => 'Nursery to SS 3, arms like JSS 1A, and the subjects each class takes.', 'icon' => 'layers', 'done' => $classCount > 0, 'route' => 'school.classes.index'],
-            ['title' => 'Bring in your students', 'body' => 'Enrol students with their parents’ contact details.', 'icon' => 'graduation-cap', 'done' => $studentCount > 0, 'route' => 'school.students.index'],
-            ['title' => 'Add your staff', 'body' => 'Give the principal, bursar and teachers their own logins.', 'icon' => 'user-plus', 'done' => $staffCount > 1, 'route' => 'school.staff.index'],
         ];
     }
 

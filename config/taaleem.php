@@ -51,6 +51,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Backups
+    |--------------------------------------------------------------------------
+    |
+    | Where deploy/backup.sh writes its nightly files (~/backups of the app user),
+    | so the platform Health page can show when the last one ran.
+    |
+    */
+
+    'backup_path' => env('BACKUP_PATH', rtrim((string) (getenv('HOME') ?: storage_path('app')), '/').'/backups'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Marketing site
     |--------------------------------------------------------------------------
     |

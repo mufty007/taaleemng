@@ -23,6 +23,9 @@ return [
         'public_key' => env('PAYSTACK_PUBLIC_KEY'),
         'secret_key' => env('PAYSTACK_SECRET_KEY'),
         'base_url' => env('PAYSTACK_BASE_URL', 'https://api.paystack.co'),
+        // Each school's fees settle to its own subaccount. Local testing can switch this off
+        // (payments then settle to the platform account); production always requires it.
+        'require_subaccount' => (bool) env('PAYSTACK_REQUIRE_SUBACCOUNT', true),
     ],
 
     'resend' => [

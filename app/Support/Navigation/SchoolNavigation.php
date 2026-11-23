@@ -3,6 +3,8 @@
 namespace App\Support\Navigation;
 
 use App\Models\User;
+use App\Support\Platform\Modules;
+use App\Support\Tenancy\CurrentSchool;
 use Illuminate\Support\Facades\Route;
 
 /**
@@ -79,6 +81,53 @@ final class SchoolNavigation
     }
 
     /**
+     * The tab bar along the bottom of a phone screen: home, the few pages this role
+     * opens every day, and (in the layout) a button for the full menu.
+     *
+     * @return list<array{label: string, icon: string, route: string, active: bool}>
+     */
+    public static function tabs(User $user): array
+    {
+        $available = [];
+
+        foreach (self::for($user) as $group) {
+            foreach ($group['items'] as $item) {
+                if ($item['route'] !== null) {
+                    $available[$item['route']] ??= $item;
+                }
+            }
+        }
+
+        $preferred = match (true) {
+            ! $user->isStaffInCurrentSchool() && ! $user->is_platform_admin => [
+                'school.portal' => 'Home', 'school.portal.classwork' => 'My work', 'school.announcements.index' => 'Notices',
+            ],
+            ! $user->can('students.view-all') => [
+                'school.dashboard' => 'Home', 'school.attendance.index' => 'Register', 'school.scores.index' => 'Scores', 'school.classwork.index' => 'Classwork',
+            ],
+            $user->can('inventory.manage') && ! $user->can('academics.manage') && ! $user->can('finance.view') => [
+                'school.dashboard' => 'Home', 'school.inventory.index' => 'Stock', 'school.students.index' => 'Students', 'school.reports.index' => 'Reports',
+            ],
+            $user->can('finance.view') && ! $user->can('academics.manage') => [
+                'school.dashboard' => 'Home', 'school.payments.index' => 'Payments', 'school.debtors.index' => 'Debtors', 'school.invoices.index' => 'Invoices',
+            ],
+            default => [
+                'school.dashboard' => 'Home', 'school.students.index' => 'Students', 'school.attendance.index' => 'Attendance', 'school.reports.index' => 'Reports',
+            ],
+        };
+
+        $tabs = [];
+
+        foreach ($preferred as $route => $label) {
+            if (isset($available[$route])) {
+                $tabs[] = ['label' => $label, 'icon' => $available[$route]['icon'], 'route' => $route, 'active' => $available[$route]['active']];
+            }
+        }
+
+        return $tabs;
+    }
+
+    /**
      * @return array<string, list<array{0: string, 1: string, 2: ?string, 3: ?string, 4: ?string}>>
      */
     private static function portalGroups(User $user): array
@@ -108,9 +157,11 @@ final class SchoolNavigation
         $navigation = [];
 
         foreach ($groups as $label => $items) {
+            $school = app(CurrentSchool::class)->get();
             $visible = array_values(array_filter(
                 $items,
-                fn (array $item): bool => $item[3] === null || $user->can($item[3]),
+                fn (array $item): bool => ($item[3] === null || $user->can($item[3]))
+                    && ($school === null || $item[2] === null || ! Modules::hidesRoute($school, $item[2])),
             ));
 
             if ($visible === []) {

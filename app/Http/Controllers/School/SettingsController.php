@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\School;
 
 use App\Actions\Fees\SyncSchoolPayoutSubaccount;
+use App\Enums\SchoolInvoiceStatus;
 use App\Http\Controllers\Controller;
 use App\Models\NumberSequence;
+use App\Models\SchoolInvoice;
 use App\Models\SchoolSetting;
 use App\Support\Numbering\SequenceGenerator;
 use App\Support\Payments\NigerianBanks;
@@ -62,6 +64,9 @@ class SettingsController extends Controller
             'payoutAccountNumber' => SchoolSetting::valueFor('payout_account_number'),
             'payoutAccountName' => SchoolSetting::valueFor('payout_account_name'),
             'paystackReady' => filled(SchoolSetting::valueFor('paystack_subaccount')),
+            'subscriptionInvoices' => SchoolInvoice::query()->where('school_id', $school->id)
+                ->whereIn('status', [SchoolInvoiceStatus::Sent, SchoolInvoiceStatus::Paid])
+                ->latest('issued_on')->limit(4)->get(),
             'platformPaystackReady' => $paystack->isConfigured(),
             'banks' => NigerianBanks::options(),
             'numbering' => $numbering,

@@ -30,7 +30,7 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3" data-stagger>
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 [&>*:first-child]:col-span-2 sm:[&>*:first-child]:col-span-1" data-stagger>
         @php($todo = $assignments->reject(fn ($assignment) => $submissions->has($assignment->id) || $assignment->isPastDue())->count())
         @php($openQuizzes = $quizzes->filter(fn ($quiz) => $quiz->isOpen() && ! $quizAttempts->get($quiz->id)?->submitted_at)->count())
         @if ($ownProfile)

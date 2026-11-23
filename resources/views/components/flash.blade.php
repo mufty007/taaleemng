@@ -19,7 +19,7 @@
         x-transition.opacity.duration.200ms
         x-init="setTimeout(() => open = false, 6000)"
         role="status"
-        class="fixed right-4 bottom-4 z-50 flex max-w-sm items-start gap-3 rounded-2xl bg-ink px-4 py-3.5 text-[15px] text-white shadow-float"
+        class="fixed right-4 bottom-[calc(1rem+var(--tabbar-h,0px))] z-50 flex max-w-sm items-start gap-3 rounded-2xl bg-ink px-4 py-3.5 text-[15px] text-white shadow-float"
     >
         <x-lucide-circle-check class="mt-0.5 size-5 flex-none text-[#7FE0B0]" aria-hidden="true" />
         <span class="flex-1">{{ $message }}</span>

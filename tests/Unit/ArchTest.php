@@ -2,7 +2,10 @@
 
 use App\Models\DemoRequest;
 use App\Models\Membership;
+use App\Models\PlatformBroadcast;
+use App\Models\PlatformSetting;
 use App\Models\School;
+use App\Models\SchoolInvoice;
 use App\Models\User;
 use App\Support\Tenancy\BelongsToSchool;
 
@@ -16,6 +19,9 @@ arch('tenant models are scoped to a school')
         School::class,
         Membership::class,
         DemoRequest::class,
+        PlatformSetting::class,
+        PlatformBroadcast::class,
+        SchoolInvoice::class,
     ]);
 
 arch('no debugging calls are left behind')

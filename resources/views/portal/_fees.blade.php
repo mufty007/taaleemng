@@ -11,6 +11,12 @@
         </div>
         @if ($balance > 0 && ! $canPayOnline)
             <p class="m-0 max-w-sm text-sm text-muted">Pay at the school bursary or by bank transfer, then keep your receipt.</p>
+        @elseif ($balance > 0)
+            <form method="POST" action="{{ route('school.portal.children.pay', $student) }}" class="w-full sm:w-auto" data-native>
+                @csrf
+                <x-button variant="brand" size="lg" icon="lock" class="w-full sm:w-auto">Pay {{ Money::format($balance) }} now</x-button>
+                <span class="mt-1.5 block text-center text-xs text-muted">Card, transfer or USSD, through Paystack</span>
+            </form>
         @endif
 
 

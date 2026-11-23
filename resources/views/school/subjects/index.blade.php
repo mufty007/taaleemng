@@ -146,7 +146,7 @@
                         </li>
                     @endforeach
                 </ul>
-                <x-button variant="brand" class="sticky bottom-0 self-start" icon="save">Save classes</x-button>
+                <x-button variant="brand" class="sticky bottom-[var(--tabbar-h,0px)] self-start" icon="save">Save classes</x-button>
             </form>
         </x-drawer>
     </div>

@@ -20,7 +20,7 @@
         </x-slot:actions>
     </x-page-header>
 
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 [&>*:first-child]:col-span-2 sm:[&>*:first-child]:col-span-1">
         <x-stat-card label="On hand" :value="number_format($item->quantity_on_hand)" icon="package" :tone="$item->isLowStock() ? 'danger' : 'naija'" :hint="'Reorder at '.$item->reorder_level" />
         <x-stat-card label="Unit cost" :value="$item->unit_cost ? Money::format($item->unit_cost) : '—'" icon="banknote" tone="gold" />
         <x-stat-card label="Stock value" :value="$item->unit_cost ? Money::format($item->unit_cost * $item->quantity_on_hand) : '—'" icon="wallet" tone="brand" />

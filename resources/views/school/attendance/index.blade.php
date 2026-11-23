@@ -26,7 +26,7 @@
         </x-slot:actions>
     </x-page-header>
 
-    <section class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <section class="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 [&>*:first-child]:col-span-2 sm:[&>*:first-child]:col-span-1">
         <x-stat-card label="Registers taken" :value="$taken.' of '.$arms->count()" icon="clipboard-check" />
         <x-stat-card label="Present" :value="$marked ? round($present / $marked * 100).'%' : '—'" :hint="$present.' of '.$marked.' marked'" icon="user-round-check" tone="naija" />
         <x-stat-card label="Absent" :value="(string) $counts->sum(fn ($row) => $row['absent'] ?? 0)" icon="user-round-x" tone="gold" />

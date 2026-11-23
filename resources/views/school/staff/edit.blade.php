@@ -30,19 +30,21 @@
                 <x-select-field label="Status" name="status" :options="$statusOptions" :value="$staff->status->value" required />
                 <x-select-field label="What they can do in Ta’aleem" name="role" :options="$roleOptions" :value="$currentRole" required />
             </x-card>
-            <x-card class="flex flex-col gap-4">
-                <h2 class="m-0 text-lg font-semibold">Pay</h2>
-                <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    <x-field label="Basic salary (₦)" name="basic_salary" inputmode="decimal" :value="old('basic_salary', $staff->basic_salary !== null ? \App\Support\Money::toNaira($staff->basic_salary) : '')" placeholder="180,000" />
-                    <x-field label="Allowances (₦)" name="allowances" inputmode="decimal" :value="old('allowances', \App\Support\Money::toNaira($staff->allowances))" placeholder="20,000" />
-                    <x-field label="Deductions (₦)" name="deductions" inputmode="decimal" :value="old('deductions', \App\Support\Money::toNaira($staff->deductions))" placeholder="21,600" />
-                </div>
-                <x-field label="Bank" name="bank_name" :value="$staff->bank_name" placeholder="Access Bank" />
-                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <x-field label="Account name" name="bank_account_name" :value="$staff->bank_account_name" />
-                    <x-field label="Account number" name="bank_account_number" :value="$staff->bank_account_number" inputmode="numeric" />
-                </div>
-            </x-card>
+            @if ($canEditPay)
+                <x-card class="flex flex-col gap-4">
+                    <h2 class="m-0 text-lg font-semibold">Pay</h2>
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                        <x-field label="Basic salary (₦)" name="basic_salary" inputmode="decimal" :value="old('basic_salary', $staff->basic_salary !== null ? \App\Support\Money::toNaira($staff->basic_salary) : '')" placeholder="180,000" />
+                        <x-field label="Allowances (₦)" name="allowances" inputmode="decimal" :value="old('allowances', \App\Support\Money::toNaira($staff->allowances))" placeholder="20,000" />
+                        <x-field label="Deductions (₦)" name="deductions" inputmode="decimal" :value="old('deductions', \App\Support\Money::toNaira($staff->deductions))" placeholder="21,600" />
+                    </div>
+                    <x-field label="Bank" name="bank_name" :value="$staff->bank_name" placeholder="Access Bank" />
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <x-field label="Account name" name="bank_account_name" :value="$staff->bank_account_name" />
+                        <x-field label="Account number" name="bank_account_number" :value="$staff->bank_account_number" inputmode="numeric" />
+                    </div>
+                </x-card>
+            @endif
             <div class="flex flex-wrap gap-2">
                 <x-button variant="brand" size="lg" icon="check">Save changes</x-button>
                 <x-button variant="ghost" size="lg" :href="route('school.staff.show', $staff)">Cancel</x-button>

@@ -65,7 +65,15 @@
                         </a>
                     </div>
 
-                    <x-button variant="secondary" :href="route('school.portal.child', $child)" class="mt-auto">See {{ $child->first_name }}’s class and teachers</x-button>
+                    <div class="mt-auto flex flex-col gap-2">
+                        @if (($balances[$child->id] ?? 0) > 0 && $canPayOnline)
+                            <form method="POST" action="{{ route('school.portal.children.pay', $child) }}" data-native>
+                                @csrf
+                                <x-button variant="brand" icon="lock" class="w-full">Pay {{ \App\Support\Money::format($balances[$child->id]) }} now</x-button>
+                            </form>
+                        @endif
+                        <x-button variant="secondary" :href="route('school.portal.child', $child)">See {{ $child->first_name }}’s class and teachers</x-button>
+                    </div>
                 </article>
             @endforeach
         </div>

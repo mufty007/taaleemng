@@ -162,4 +162,24 @@ class User extends Authenticatable
             default => null,
         };
     }
+
+    /**
+     * A stored +234 number the way people write it locally: "0803 123 4567".
+     */
+    public static function displayPhone(?string $phone): ?string
+    {
+        if ($phone === null || $phone === '') {
+            return null;
+        }
+
+        $normalised = self::normalisePhone($phone);
+
+        if ($normalised === null) {
+            return $phone;
+        }
+
+        $local = '0'.substr($normalised, 4);
+
+        return substr($local, 0, 4).' '.substr($local, 4, 3).' '.substr($local, 7);
+    }
 }

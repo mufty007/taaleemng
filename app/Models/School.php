@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\Plan;
 use App\Enums\SchoolStatus;
 use App\Enums\SchoolType;
 use Database\Factories\SchoolFactory;
@@ -10,7 +11,9 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -19,10 +22,19 @@ use Illuminate\Support\Str;
  *
  * @property SchoolStatus $status
  * @property SchoolType $school_type
+ * @property Carbon|null $trial_ends_at
+ * @property Plan $plan
+ * @property int|null $price_per_student
+ * @property Carbon|null $paid_until
+ * @property list<string>|null $disabled_modules
+ * @property-read int|null $students_count Only on SchoolDirectory queries.
+ * @property-read int|null $staff_count Only on SchoolDirectory queries.
+ * @property-read Carbon|null $last_active_at Only on SchoolDirectory queries.
  */
 #[Fillable([
     'name', 'slug', 'short_code', 'logo_path', 'motto', 'address', 'state', 'lga',
     'phone', 'email', 'website', 'school_type', 'curriculum_type', 'status', 'trial_ends_at',
+    'plan', 'price_per_student', 'billing_cycle', 'paid_until', 'disabled_modules', 'billing_notes',
 ])]
 class School extends Model
 {
@@ -38,7 +50,35 @@ class School extends Model
             'status' => SchoolStatus::class,
             'school_type' => SchoolType::class,
             'trial_ends_at' => 'datetime',
+            'plan' => Plan::class,
+            'price_per_student' => 'integer',
+            'paid_until' => 'date',
+            'disabled_modules' => 'array',
         ];
+    }
+
+    /**
+     * Whether a module (see App\Support\Platform\Modules) is switched on for this school.
+     */
+    public function hasModule(string $module): bool
+    {
+        return ! in_array($module, $this->disabled_modules ?? [], true);
+    }
+
+    /**
+     * Price per student per term in kobo: the school's own price, else its plan's.
+     */
+    public function pricePerStudent(): ?int
+    {
+        return $this->price_per_student ?? $this->plan->defaultPrice();
+    }
+
+    /**
+     * @return HasMany<SchoolInvoice, $this>
+     */
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(SchoolInvoice::class)->latest('issued_on')->latest('id');
     }
 
     /**

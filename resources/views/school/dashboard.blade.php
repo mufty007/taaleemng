@@ -8,7 +8,7 @@
         $nextStep = collect($setupSteps)->firstWhere('done', false);
     @endphp
 
-    <x-page-header :kicker="$school->name" :title="$greeting.', '.$firstName" :description="now()->format('l j F Y').($term && ($week = $term->weekOf(now())) ? ' · '.$term->name.', week '.$week : '').' · '.$roles->join(', ', ' and ')">
+    <x-page-header :kicker="auth()->user()->is_platform_admin ? 'Support view' : $school->name" :title="auth()->user()->is_platform_admin ? $school->name : $greeting.', '.$firstName" :description="now()->format('l j F Y').($term && ($week = $term->weekOf(now())) ? ' · '.$term->name.', week '.$week : '').' · '.$roles->join(', ', ' and ')">
         <x-slot:actions>
             @if ($school->status === \App\Enums\SchoolStatus::Trial && $school->trial_ends_at)
                 <x-badge tone="gold">Trial · {{ (int) max(0, now()->diffInDays($school->trial_ends_at, false)) }} days left</x-badge>
@@ -73,7 +73,7 @@
         </section>
     @endif
 
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" data-stagger>
+    <div class="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4" data-stagger>
         @foreach ($stats as $stat)
             <x-stat-card :label="$stat['label']" :value="$stat['value']" :hint="$stat['hint']" :icon="$stat['icon']" :tone="$stat['tone']" :href="$stat['url'] ?? null" />
         @endforeach
@@ -83,6 +83,8 @@
         @include('school.dashboard._teacher')
     @elseif ($mode === 'bursar')
         @include('school.dashboard._bursar')
+    @elseif ($mode === 'store')
+        @include('school.dashboard._store')
     @else
         @include('school.dashboard._office')
     @endif

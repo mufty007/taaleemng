@@ -7,6 +7,7 @@ use App\Actions\Fees\StartOnlinePayment;
 use App\Enums\PaymentStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
+use App\Models\Student;
 use App\Support\Money;
 use App\Support\Payments\Paystack;
 use Illuminate\Http\Client\RequestException;
@@ -28,6 +29,28 @@ class FeeController extends Controller
 
         try {
             return redirect()->away($start->handle($invoice->load('student'), $request->user()));
+        } catch (ValidationException $exception) {
+            return back()->with('status', $exception->validator->errors()->first());
+        } catch (RequestException) {
+            return back()->with('status', 'Online payment is not available right now. Please try again in a few minutes, or pay at the school.');
+        }
+    }
+
+    /**
+     * "Pay now" on a child's card: everything the child owes, in one Paystack payment.
+     */
+    public function payAll(Request $request, Student $student, StartOnlinePayment $start, Paystack $paystack): RedirectResponse
+    {
+        $user = $request->user();
+        $guardian = $user->guardianRecord();
+
+        abort_unless($guardian?->students()->whereKey($student->id)->exists(), 403);
+        abort_unless($paystack->isConfigured(), 404);
+
+        $email = $user->email ?? preg_replace('/\D/', '', (string) $user->phone).'@parents.taaleem.ng';
+
+        try {
+            return redirect()->away($start->forStudent($student, $email, $guardian, route('school.portal.payments.callback'), $user));
         } catch (ValidationException $exception) {
             return back()->with('status', $exception->validator->errors()->first());
         } catch (RequestException) {

@@ -22,7 +22,7 @@
                 <x-badge :tone="$staff->status === \App\Enums\StaffStatus::Active ? 'naija' : 'neutral'">{{ $staff->status->label() }}</x-badge>
             </div>
         </div>
-        @can('staff.manage')
+        @can('update', $staff)
             <x-button variant="soft" icon="pencil" :href="route('school.staff.edit', $staff)">Edit</x-button>
         @endcan
     </div>
@@ -65,9 +65,11 @@
                 <dd class="m-0 font-medium">{{ $staff->date_employed?->format('d/m/Y') ?? '—' }}</dd>
                 <dt class="text-muted">Qualification</dt>
                 <dd class="m-0 font-medium">{{ $staff->qualification ?? '—' }}</dd>
-                <dt class="text-muted">Basic salary</dt>
-                <dd class="m-0 font-medium">{{ $staff->basic_salary ? \App\Support\Money::format($staff->basic_salary).'/month' : 'Not set' }}</dd>
-                @if ($staff->basic_salary)
+                @if ($canSeePay)
+                    <dt class="text-muted">Basic salary</dt>
+                    <dd class="m-0 font-medium">{{ $staff->basic_salary ? \App\Support\Money::format($staff->basic_salary).'/month' : 'Not set' }}</dd>
+                @endif
+                @if ($canSeePay && $staff->basic_salary)
                     <dt class="text-muted">Allowances</dt>
                     <dd class="m-0 font-medium">{{ \App\Support\Money::format($staff->allowances) }}</dd>
                     <dt class="text-muted">Deductions</dt>

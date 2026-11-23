@@ -1,6 +1,30 @@
 <x-layouts.app title="Settings">
     <x-page-header kicker="System" title="Settings" description="Admissions, promotion, payments and how document numbers are built for {{ $school->name }}." />
 
+    {{-- What the school pays Ta'aleem. --}}
+    <x-card class="flex flex-wrap items-start gap-6">
+        <div class="min-w-[220px] flex-1">
+            <h2 class="m-0 text-lg font-semibold">Ta’aleem subscription</h2>
+            <p class="m-0 mt-1 text-sm text-muted">
+                {{ $school->plan->label() }} plan{{ $school->pricePerStudent() ? ' · '.\App\Support\Money::format($school->pricePerStudent()).' per student per term' : '' }}{{ $school->paid_until ? ' · paid up to '.$school->paid_until->format('j M Y') : '' }}.
+                Questions about your plan? Email {{ config('taaleem.marketing.contact_email') }}.
+            </p>
+        </div>
+        <ul class="m-0 flex w-full list-none flex-col gap-2 p-0 sm:w-auto sm:min-w-[320px]">
+            @forelse ($subscriptionInvoices as $invoice)
+                <li class="flex items-center justify-between gap-3 rounded-xl bg-canvas px-3 py-2 text-sm">
+                    <span><span class="font-mono">{{ $invoice->number }}</span> · {{ $invoice->period }}</span>
+                    <span class="flex items-center gap-2">
+                        <span class="font-semibold">{{ \App\Support\Money::format($invoice->amount) }}</span>
+                        <x-badge :tone="$invoice->isOverdue() ? 'danger' : $invoice->status->tone()">{{ $invoice->isOverdue() ? 'Overdue' : ($invoice->status === \App\Enums\SchoolInvoiceStatus::Sent ? 'Due '.$invoice->due_on->format('j M') : 'Paid') }}</x-badge>
+                    </span>
+                </li>
+            @empty
+                <li class="text-sm text-muted">No invoices yet.</li>
+            @endforelse
+        </ul>
+    </x-card>
+
     <form method="POST" action="{{ route('school.settings.update') }}" class="flex flex-col gap-6">
         @csrf
         @method('PUT')

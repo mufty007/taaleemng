@@ -16,13 +16,12 @@ use App\Models\ExamPaper;
 use App\Models\Quiz;
 use App\Models\QuizAttempt;
 use App\Models\ResultPublication;
-use App\Models\SchoolSetting;
 use App\Models\SpecialExam;
 use App\Models\Student;
 use App\Models\Term;
 use App\Support\Attendance\AttendanceSummary;
 use App\Support\Exams\SpecialExamResults;
-use App\Support\Payments\Paystack;
+use App\Support\Finance\FeeStatement;
 use App\Support\Results\ResultCalculator;
 use App\Support\Timetable\Timetable;
 use Illuminate\Contracts\View\View;
@@ -58,6 +57,7 @@ class PortalController extends Controller
                 'guardian' => $guardian,
                 'children' => $children,
                 'balances' => $children->mapWithKeys(fn (Student $child) => [$child->id => AllocatePayments::balance($child)]),
+                'canPayOnline' => FeeStatement::canPayOnline(),
                 'term' => $term,
                 'latestNotices' => $this->latestNotices($request),
                 'attendance' => $term
@@ -167,9 +167,7 @@ class PortalController extends Controller
             'invoices' => $student->invoices()->with('term.academicSession')->where('status', '!=', InvoiceStatus::Void)->latest('issued_at')->get(),
             'payments' => $student->payments()->where('status', PaymentStatus::Confirmed)->latest('paid_at')->limit(10)->get(),
             'balance' => AllocatePayments::balance($student),
-            'canPayOnline' => ! $ownProfile
-                && app(Paystack::class)->isConfigured()
-                && filled(SchoolSetting::valueFor('paystack_subaccount')),
+            'canPayOnline' => ! $ownProfile && FeeStatement::canPayOnline(),
             ...$this->attendanceAndWork($student, $term),
             'publishedResults' => collect($publishedResults)->sortByDesc(fn (array $result) => $result['term']->starts_on)->values(),
             'specialExams' => $this->specialExamResults($student),

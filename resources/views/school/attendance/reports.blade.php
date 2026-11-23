@@ -20,7 +20,7 @@
         </x-slot:actions>
     </x-page-header>
 
-    <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <section class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <x-stat-card label="Student presence" :value="$students['rate'] !== null ? $students['rate'].'%' : '—'" :hint="$students['present'].' of '.$students['marked'].' marks'" icon="user-round-check" tone="naija" />
         <x-stat-card label="Student absences" :value="(string) $students['absent']" :hint="$students['late'].' late marks'" icon="user-round-x" tone="gold" />
         <x-stat-card label="Staff presence" :value="$staffSummary['rate'] !== null ? $staffSummary['rate'].'%' : '—'" :hint="$staffSummary['present'].' of '.$staffSummary['marked'].' marks'" icon="briefcase" tone="sky" />

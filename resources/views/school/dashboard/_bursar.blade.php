@@ -14,7 +14,11 @@
             <div class="mt-3 grid grid-cols-1 gap-2">
                 <x-button variant="secondary" icon="search" :href="route('school.students.index')" class="justify-start">Find a student to record a payment</x-button>
                 <x-button variant="secondary" icon="receipt" :href="route('school.invoices.index', ['status' => 'unpaid'])" class="justify-start">Unpaid invoices</x-button>
-                <x-button variant="secondary" icon="hand-coins" :href="route('school.debtors.index')" class="justify-start">Debtors list</x-button>
+                @can('fees.remind')
+                    <x-button variant="secondary" icon="bell-ring" :href="route('school.debtors.index')" class="justify-start">Remind parents who owe</x-button>
+                @else
+                    <x-button variant="secondary" icon="hand-coins" :href="route('school.debtors.index')" class="justify-start">Debtors list</x-button>
+                @endcan
                 @can('fees.manage')
                     <x-button variant="secondary" icon="settings-2" :href="route('school.fees.setup')" class="justify-start">Fee setup</x-button>
                 @endcan

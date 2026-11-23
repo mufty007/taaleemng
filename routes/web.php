@@ -6,6 +6,7 @@ use App\Http\Controllers\AppEntryController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\Marketing\DemoRequestController;
 use App\Http\Controllers\Marketing\MarketingController;
+use App\Http\Controllers\PayLinkController;
 use App\Http\Controllers\Platform;
 use App\Http\Controllers\Portal;
 use App\Http\Controllers\Portal\PortalController;
@@ -41,6 +42,15 @@ Route::middleware(['school.public', 'throttle:60,1'])->get('/verify/{school}/{ki
     ->whereIn('kind', ['student', 'staff'])
     ->name('id-cards.verify');
 
+// The pay link in a fee reminder: what a student owes and a "Pay now" button, no sign-in needed.
+Route::middleware(['school.public', 'throttle:30,1'])->prefix('/pay/{school}')->name('pay.')->group(function () {
+    Route::get('/done', [PayLinkController::class, 'callback'])->name('callback');
+    Route::middleware('signed')->group(function () {
+        Route::get('/{student}', [PayLinkController::class, 'show'])->where('student', '[0-9a-z]{26}')->name('show');
+        Route::post('/{student}', [PayLinkController::class, 'start'])->where('student', '[0-9a-z]{26}')->name('start');
+    });
+});
+
 // Paystack payment notifications (signature-checked, then re-verified with Paystack).
 Route::post('/webhooks/paystack', PaystackWebhookController::class)->name('webhooks.paystack');
 
@@ -61,9 +71,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/app/schools', SchoolPickerController::class)->name('schools.pick');
     Route::get('/account', [AccountController::class, 'edit'])->name('account');
 
+    // A super admin stops viewing as someone (see Platform\ViewAsController::start).
+    Route::post('/view-as/stop', [Platform\ViewAsController::class, 'stop'])->name('view-as.stop');
+
     // Everything inside a school. {school} is the school's slug; see EnsureSchoolContext.
     Route::prefix('app/{school}')
-        ->middleware(['school', 'school.active'])
+        ->middleware(['school', 'school.active', 'module'])
         ->name('school.')
         ->group(function () {
             Route::get('/', School\DashboardController::class)->name('dashboard');
@@ -75,11 +88,13 @@ Route::middleware('auth')->group(function () {
             Route::post('/notices/{announcement}/read', [School\AnnouncementController::class, 'markRead'])->name('announcements.mark-read');
             Route::get('/notices/{announcement}', [School\AnnouncementController::class, 'show'])->name('announcements.show');
             Route::delete('/notices/{announcement}', [School\AnnouncementController::class, 'destroy'])->name('announcements.destroy');
+            Route::post('/broadcasts/{broadcast}/dismiss', School\BroadcastDismissalController::class)->name('broadcasts.dismiss');
 
             // Parent and student portal
             Route::get('/portal', [PortalController::class, 'index'])->name('portal');
             Route::get('/portal/children/{student}', [PortalController::class, 'child'])->name('portal.child');
             Route::post('/portal/invoices/{invoice}/pay', [Portal\FeeController::class, 'pay'])->name('portal.invoices.pay');
+            Route::post('/portal/children/{student}/pay', [Portal\FeeController::class, 'payAll'])->name('portal.children.pay');
             Route::get('/portal/payments/callback', [Portal\FeeController::class, 'callback'])->name('portal.payments.callback');
 
             // Classwork: assignments, quizzes and CBT exams
@@ -170,6 +185,10 @@ Route::middleware('auth')->group(function () {
                 Route::get('/invoices/{invoice}', [School\InvoiceController::class, 'show'])->name('invoices.show');
                 Route::get('/payments', [School\PaymentController::class, 'index'])->name('payments.index');
                 Route::get('/debtors', [School\DebtorController::class, 'index'])->name('debtors.index');
+            });
+            Route::middleware('can:fees.remind')->group(function () {
+                Route::post('/fee-reminders', [School\FeeReminderController::class, 'bulk'])->middleware('throttle:6,1')->name('fee-reminders.bulk');
+                Route::post('/fee-reminders/{student}', [School\FeeReminderController::class, 'store'])->name('fee-reminders.store');
             });
             Route::middleware('can:finance.view')->group(function () {
                 Route::get('/expenses', [School\ExpenseController::class, 'index'])->name('expenses.index');
@@ -345,8 +364,48 @@ Route::middleware('auth')->group(function () {
             Route::get('/schools/create', [Platform\SchoolController::class, 'create'])->name('schools.create');
             Route::post('/schools', [Platform\SchoolController::class, 'store'])->name('schools.store');
             Route::get('/schools/{school:slug}', [Platform\SchoolController::class, 'show'])->name('schools.show');
+            Route::put('/schools/{school:slug}', [Platform\SchoolController::class, 'update'])->name('schools.update');
             Route::patch('/schools/{school:slug}/status', Platform\SchoolStatusController::class)->name('schools.status');
+            Route::post('/schools/{school:slug}/trial', [Platform\SchoolController::class, 'extendTrial'])->name('schools.trial');
+            Route::post('/schools/{school:slug}/members/{user:ulid}/sign-in-link', [Platform\SchoolMemberController::class, 'signInLink'])->middleware('throttle:10,1')->name('schools.members.sign-in-link');
+            Route::post('/schools/{school:slug}/view-as/{user:ulid}', [Platform\ViewAsController::class, 'start'])->name('view-as.start');
             Route::get('/leads', [Platform\DemoRequestController::class, 'index'])->name('leads.index');
             Route::patch('/leads/{demoRequest}', [Platform\DemoRequestController::class, 'update'])->name('leads.update');
+
+            // Support tools: anyone on the platform, and the super admin team.
+            Route::get('/users', [Platform\UserController::class, 'index'])->name('users.index');
+            Route::post('/users/admins', [Platform\UserController::class, 'storeAdmin'])->name('users.admins.store');
+            Route::get('/users/{user:ulid}', [Platform\UserController::class, 'show'])->name('users.show');
+            Route::post('/users/{user:ulid}/password-reset', [Platform\UserController::class, 'sendPasswordReset'])->middleware('throttle:10,1')->name('users.password-reset');
+            Route::delete('/users/{user:ulid}/two-factor', [Platform\UserController::class, 'disableTwoFactor'])->name('users.two-factor');
+            Route::delete('/users/{user:ulid}/admin', [Platform\UserController::class, 'removeAdmin'])->name('users.admins.destroy');
+
+            // Billing, plans and modules.
+            Route::get('/billing', [Platform\BillingController::class, 'index'])->name('billing.index');
+            Route::put('/schools/{school:slug}/plan', [Platform\BillingController::class, 'updatePlan'])->name('schools.plan');
+            Route::put('/schools/{school:slug}/modules', [Platform\BillingController::class, 'updateModules'])->name('schools.modules');
+            Route::post('/schools/{school:slug}/invoices', [Platform\BillingController::class, 'storeInvoice'])->name('schools.invoices.store');
+            Route::post('/school-invoices/{invoice}/send', [Platform\BillingController::class, 'send'])->name('school-invoices.send');
+            Route::post('/school-invoices/{invoice}/paid', [Platform\BillingController::class, 'markPaid'])->name('school-invoices.paid');
+            Route::post('/school-invoices/{invoice}/void', [Platform\BillingController::class, 'void'])->name('school-invoices.void');
+            Route::get('/school-invoices/{invoice}/print', [Platform\BillingController::class, 'print'])->name('school-invoices.print');
+
+            // Notices from Ta'aleem to schools.
+            Route::get('/broadcasts', [Platform\BroadcastController::class, 'index'])->name('broadcasts.index');
+            Route::post('/broadcasts', [Platform\BroadcastController::class, 'store'])->name('broadcasts.store');
+            Route::post('/broadcasts/{broadcast}/end', [Platform\BroadcastController::class, 'end'])->name('broadcasts.end');
+
+            // Health, failed jobs and the super admin audit log.
+            Route::get('/health', [Platform\HealthController::class, 'index'])->name('health');
+            Route::post('/health/failed-jobs/retry', [Platform\HealthController::class, 'retry'])->name('health.retry');
+            Route::delete('/health/failed-jobs', [Platform\HealthController::class, 'forget'])->name('health.forget');
+            Route::get('/audit', [Platform\HealthController::class, 'audit'])->name('audit');
+
+            // Paystack keys and the central SMTP account for every school.
+            Route::get('/settings', [Platform\SettingsController::class, 'edit'])->name('settings.edit');
+            Route::put('/settings/paystack', [Platform\SettingsController::class, 'updatePaystack'])->name('settings.paystack');
+            Route::post('/settings/paystack/check', [Platform\SettingsController::class, 'testPaystack'])->middleware('throttle:10,1')->name('settings.paystack.check');
+            Route::put('/settings/mail', [Platform\SettingsController::class, 'updateMail'])->name('settings.mail');
+            Route::post('/settings/mail/test', [Platform\SettingsController::class, 'testMail'])->middleware('throttle:6,1')->name('settings.mail.test');
         });
 });

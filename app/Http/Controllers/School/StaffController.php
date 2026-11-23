@@ -12,19 +12,28 @@ use App\Http\Controllers\Controller;
 use App\Models\Staff;
 use App\Models\User;
 use App\Support\Money;
+use App\Support\Permissions\RoleGrants;
 use Closure;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\Rule;
 
 class StaffController extends Controller
 {
+    /**
+     * The staff directory: search, then narrow by teaching or support staff, department and status.
+     */
     public function index(Request $request): View
     {
         $search = trim((string) $request->query('search'));
+        $type = in_array($request->query('type'), ['teaching', 'support'], true) ? (string) $request->query('type') : null;
+        $department = trim((string) $request->query('department'));
+        $status = StaffStatus::tryFrom((string) $request->query('status'));
+        $teaching = fn (Builder $query) => $query->where(fn (Builder $query) => $query->whereHas('classSubjects')->orWhereHas('formClasses'));
 
         $staff = Staff::query()
             ->with(['user', 'formClasses.level'])
@@ -34,18 +43,33 @@ class StaffController extends Controller
                 ->orWhere('last_name', 'like', "%{$search}%")
                 ->orWhere('designation', 'like', "%{$search}%")
                 ->orWhere('staff_no', 'like', "%{$search}%")))
+            ->when($type === 'teaching', $teaching)
+            ->when($type === 'support', fn (Builder $query) => $query->whereDoesntHave('classSubjects')->whereDoesntHave('formClasses'))
+            ->when($department !== '', fn (Builder $query) => $query->where('department', $department))
+            ->when($status, fn (Builder $query) => $query->where('status', $status))
             ->orderBy('last_name')
+            ->orderBy('first_name')
             ->paginate(30)
             ->withQueryString();
+
+        $total = Staff::query()->count();
+        $teachingCount = Staff::query()->tap($teaching)->count();
 
         return view('school.staff.index', [
             'staff' => $staff,
             'search' => $search,
+            'type' => $type,
+            'department' => $department,
+            'status' => $status,
+            'counts' => ['all' => $total, 'teaching' => $teachingCount, 'support' => $total - $teachingCount],
+            'departments' => Staff::query()->whereNotNull('department')->distinct()->orderBy('department')->pluck('department'),
+            'statusOptions' => collect(StaffStatus::cases())->mapWithKeys(fn (StaffStatus $option) => [$option->value => $option->label()])->all(),
+            'filtered' => $search !== '' || $type !== null || $department !== '' || $status !== null,
             'canManage' => $request->user()->can('staff.manage'),
         ]);
     }
 
-    public function show(Staff $staff): View
+    public function show(Request $request, Staff $staff): View
     {
         $staff->load([
             'user',
@@ -53,31 +77,30 @@ class StaffController extends Controller
             'classSubjects' => fn ($query) => $query->with(['subject', 'classArm.level']),
         ]);
 
-        return view('school.staff.show', ['staff' => $staff]);
-    }
-
-    public function create(): View
-    {
-        return view('school.staff.create', $this->formOptions());
-    }
-
-    public function edit(Staff $staff): View
-    {
-        $currentRole = $staff->user
-            ? $staff->user->getRoleNames()
-                ->map(fn (string $name): ?SchoolRole => SchoolRole::tryFrom($name))
-                ->first(fn (?SchoolRole $role): bool => $role?->isStaff() ?? false)
-            : null;
-
-        return view('school.staff.edit', $this->formOptions() + [
+        return view('school.staff.show', [
             'staff' => $staff,
-            'currentRole' => ($currentRole ?? SchoolRole::Teacher)->value,
+            'canSeePay' => $request->user()->can('payroll.manage'),
+        ]);
+    }
+
+    public function create(Request $request): View
+    {
+        return view('school.staff.create', $this->formOptions($request->user()));
+    }
+
+    public function edit(Request $request, Staff $staff): View
+    {
+        Gate::authorize('update', $staff);
+
+        return view('school.staff.edit', $this->formOptions($request->user()) + [
+            'staff' => $staff,
+            'currentRole' => (RoleGrants::currentRole($staff) ?? SchoolRole::Teacher)->value,
         ]);
     }
 
     public function store(Request $request, AddStaffMember $addStaffMember): RedirectResponse
     {
-        $data = $request->validate($this->staffRules(creating: true));
+        $data = $request->validate($this->staffRules($request->user(), creating: true));
         $role = SchoolRole::from($data['role']);
         unset($data['role']);
         $data = $this->moneyFieldsToKobo($data);
@@ -99,7 +122,9 @@ class StaffController extends Controller
 
     public function update(Request $request, Staff $staff, UpdateStaffMember $updateStaffMember): RedirectResponse
     {
-        $data = $request->validate($this->staffRules());
+        Gate::authorize('update', $staff);
+
+        $data = $request->validate($this->staffRules($request->user()));
         $role = SchoolRole::from($data['role']);
         unset($data['role']);
         $data = $this->moneyFieldsToKobo($data);
@@ -113,25 +138,36 @@ class StaffController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function formOptions(): array
+    private function formOptions(User $user): array
     {
         return [
+            'canEditPay' => $user->can('payroll.manage'),
             'genderOptions' => collect(Gender::cases())->mapWithKeys(fn ($gender) => [$gender->value => $gender->label()])->all(),
             'employmentOptions' => collect(EmploymentType::cases())->mapWithKeys(fn ($type) => [$type->value => $type->label()])->all(),
             'statusOptions' => collect(StaffStatus::cases())->mapWithKeys(fn ($status) => [$status->value => $status->label()])->all(),
-            'roleOptions' => collect(SchoolRole::cases())
-                ->filter(fn (SchoolRole $role) => $role->isStaff())
+            'roleOptions' => collect(RoleGrants::grantableBy($user))
                 ->mapWithKeys(fn (SchoolRole $role) => [$role->value => $role->label()])
                 ->all(),
         ];
     }
 
     /**
+     * Pay and bank details are only accepted from people who run payroll; anyone else
+     * leaves them exactly as they were.
+     *
      * @return array<string, list<mixed>>
      */
-    private function staffRules(bool $creating = false): array
+    private function staffRules(User $user, bool $creating = false): array
     {
         $money = ['nullable', 'string', 'max:20', 'regex:/^[₦\s\d,]*(\.\d{1,2})?$/u'];
+        $pay = $user->can('payroll.manage') ? [
+            'basic_salary' => $money,
+            'allowances' => $money,
+            'deductions' => $money,
+            'bank_name' => ['nullable', 'string', 'max:80'],
+            'bank_account_name' => ['nullable', 'string', 'max:120'],
+            'bank_account_number' => ['nullable', 'string', 'max:20'],
+        ] : [];
 
         return [
             'title' => ['nullable', 'string', 'max:20'],
@@ -149,14 +185,9 @@ class StaffController extends Controller
             'employment_type' => ['required', Rule::enum(EmploymentType::class)],
             'date_employed' => ['nullable', 'date', 'before_or_equal:today'],
             'qualification' => ['nullable', 'string', 'max:120'],
-            'basic_salary' => $money,
-            'allowances' => $money,
-            'deductions' => $money,
-            'bank_name' => ['nullable', 'string', 'max:80'],
-            'bank_account_name' => ['nullable', 'string', 'max:120'],
-            'bank_account_number' => ['nullable', 'string', 'max:20'],
+            ...$pay,
             ...($creating ? [] : ['status' => ['required', Rule::enum(StaffStatus::class)]]),
-            'role' => ['required', Rule::in(collect(SchoolRole::cases())->filter->isStaff()->map->value->all())],
+            'role' => ['required', Rule::in(array_map(fn (SchoolRole $role): string => $role->value, RoleGrants::grantableBy($user)))],
         ];
     }
 
@@ -167,6 +198,10 @@ class StaffController extends Controller
     private function moneyFieldsToKobo(array $data): array
     {
         foreach (['basic_salary', 'allowances', 'deductions'] as $field) {
+            if (! array_key_exists($field, $data)) {
+                continue;
+            }
+
             $data[$field] = filled($data[$field] ?? null) ? Money::toKobo($data[$field]) : ($field === 'basic_salary' ? null : 0);
         }
 

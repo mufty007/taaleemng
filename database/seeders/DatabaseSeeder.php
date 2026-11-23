@@ -218,6 +218,7 @@ class DatabaseSeeder extends Seeder
 
             $b->logo('#1f5f3f', '#e8b931');
             $b->fees(['nursery' => 120_000, 'primary' => 145_000, 'junior' => 185_000, 'senior' => 210_000]);
+            $b->feeReminders();
             $b->applicants(
                 ['submitted' => 7, 'screening' => 3, 'exam_scheduled' => 6, 'offered' => 4, 'accepted' => 2, 'rejected' => 2, 'withdrawn' => 1],
                 ['Nursery 1', 'Primary 1', 'Primary 4', 'JSS 1', 'JSS 1', 'SSS 1'],

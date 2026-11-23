@@ -23,7 +23,7 @@
         </x-slot:actions>
     </x-page-header>
 
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 [&>*:first-child]:col-span-2 sm:[&>*:first-child]:col-span-1">
         <x-stat-card label="Gross" :value="Money::format($run->gross_total)" icon="arrow-up-right" tone="brand" />
         <x-stat-card label="Deductions" :value="Money::format($run->deductions_total)" icon="minus" tone="gold" />
         <x-stat-card label="Net to pay" :value="Money::format($run->net_total)" icon="banknote" tone="naija" />

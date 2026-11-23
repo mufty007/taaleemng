@@ -34,7 +34,9 @@ class ConfirmOnlinePayment
                 ->lockForUpdate()
                 ->first();
 
-            if ($payment === null || $payment->status !== PaymentStatus::Pending) {
+            // A failed attempt can still turn into a payment: on Paystack's checkout the parent can
+            // try another card under the same reference. Only a confirmed payment is settled for good.
+            if ($payment === null || $payment->status === PaymentStatus::Confirmed) {
                 return $payment;
             }
 
@@ -50,8 +52,9 @@ class ConfirmOnlinePayment
                 && strtoupper((string) ($transaction['currency'] ?? 'NGN')) === 'NGN';
 
             if (! $succeeded) {
-                // Still pending at Paystack (the parent may come back to it); only record a final failure.
-                if (in_array($transaction['status'] ?? null, ['failed', 'abandoned', 'reversed'], true) || ($transaction['status'] ?? null) === 'success') {
+                // "abandoned" is how Paystack reports a checkout that was opened but not paid yet: the parent
+                // may still finish it, so it stays pending. Failures, reversals and wrong amounts are recorded.
+                if (in_array($transaction['status'] ?? null, ['failed', 'reversed'], true) || ($transaction['status'] ?? null) === 'success') {
                     $payment->update(['status' => PaymentStatus::Failed, 'meta' => [...($payment->meta ?? []), ...$gateway]]);
                 }
 

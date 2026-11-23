@@ -13,7 +13,8 @@
 @endphp
 
 <div x-data="tabs(@js($names), @js($default))" {{ $attributes->class(['flex flex-col gap-5']) }}>
-    <div class="-mx-1 overflow-x-auto px-1">
+    {{-- On narrow screens the strip scrolls sideways; the edges fade to show there is more. --}}
+    <div x-ref="strip" x-on:scroll.passive="measure()" x-on:resize.window.debounce.150ms="measure()" :style="edgeMask()" class="relative -mx-1 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div class="inline-flex min-w-full gap-1 rounded-2xl border border-line bg-white p-1.5 sm:min-w-0" role="tablist" aria-label="{{ $label }}" @keydown.right.prevent="move(1)" @keydown.left.prevent="move(-1)">
             @foreach ($tabs as $name => $tab)
                 @php($text = is_array($tab) ? $tab['label'] : $tab)

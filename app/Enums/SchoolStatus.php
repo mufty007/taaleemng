@@ -26,4 +26,17 @@ enum SchoolStatus: string
     {
         return in_array($this, [self::Trial, self::Active], true);
     }
+
+    /**
+     * Badge colour in the platform console.
+     */
+    public function tone(): string
+    {
+        return match ($this) {
+            self::Trial => 'gold',
+            self::Active => 'naija',
+            self::Suspended => 'danger',
+            self::Archived => 'neutral',
+        };
+    }
 }

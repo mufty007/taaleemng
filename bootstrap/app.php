@@ -1,8 +1,10 @@
 <?php
 
+use App\Http\Middleware\EnsureModuleEnabled;
 use App\Http\Middleware\EnsurePlatformAdmin;
 use App\Http\Middleware\EnsureSchoolContext;
 use App\Http\Middleware\EnsureSchoolIsActive;
+use App\Http\Middleware\HandleViewAs;
 use App\Http\Middleware\ResolvePublicSchool;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -23,11 +25,15 @@ return Application::configure(basePath: dirname(__DIR__))
             'school.active' => EnsureSchoolIsActive::class,
             'platform.admin' => EnsurePlatformAdmin::class,
             'school.public' => ResolvePublicSchool::class,
+            'module' => EnsureModuleEnabled::class,
         ]);
 
         // The school must be in context before route model binding runs,
         // otherwise binding {student} etc. hits the tenant scope with no school.
         $middleware->prependToPriorityList(before: SubstituteBindings::class, prepend: EnsureSchoolContext::class);
+
+        // A super admin viewing as someone: account settings closed, "Log out" goes back to the console.
+        $middleware->web(append: [HandleViewAs::class]);
 
         $middleware->redirectUsersTo('/app');
 

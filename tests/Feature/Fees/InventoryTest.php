@@ -83,3 +83,38 @@ it('flags low stock and hides the module from teachers', function () {
         ->get(route('school.inventory.index', $this->school))
         ->assertForbidden();
 });
+
+it('gives the store keeper a counter dashboard with low stock and today’s sales', function () {
+    $aisha = enrol($this->school, 'JSS 1', 'A', ['first_name' => 'Aisha', 'last_name' => 'Bello'])->student;
+    [$shirt, $tie] = inSchool($this->school, fn () => [
+        InventoryItem::query()->create(['name' => 'School shirt', 'category' => 'uniforms', 'unit' => 'piece', 'quantity_on_hand' => 12, 'reorder_level' => 10, 'unit_cost' => 4_500_00]),
+        InventoryItem::query()->create(['name' => 'School tie', 'category' => 'uniforms', 'unit' => 'piece', 'quantity_on_hand' => 0, 'reorder_level' => 5, 'unit_cost' => 1_500_00]),
+    ]);
+
+    $this->actingAs($this->store)
+        ->from(route('school.dashboard', $this->school))
+        ->post(route('school.inventory.move', [$this->school, $shirt]), ['type' => 'sale', 'quantity' => 3, 'student_id' => $aisha->id, 'item' => $shirt->ulid])
+        ->assertRedirect(route('school.dashboard', $this->school));
+
+    $this->actingAs($this->store)->get(route('school.dashboard', $this->school))
+        ->assertOk()
+        ->assertSee('At the counter')
+        ->assertSee('Aisha Bello')
+        ->assertSee('₦13,500')
+        ->assertSee('1 item out of stock')
+        ->assertSee('1 item running low')
+        ->assertSee('School shirt (9 left)')
+        ->assertSee('Out of stock')
+        ->assertDontSee('School at a glance');
+
+    expect($tie->fresh()->quantity_on_hand)->toBe(0);
+});
+
+it('tells the office when store items run low', function () {
+    inSchool($this->school, fn () => InventoryItem::query()->create(['name' => 'Exercise book', 'category' => 'stationery', 'unit' => 'piece', 'quantity_on_hand' => 2, 'reorder_level' => 10]));
+
+    $this->actingAs($this->admin)->get(route('school.dashboard', $this->school))
+        ->assertOk()
+        ->assertSee('1 store item low on stock')
+        ->assertDontSee('At the counter');
+});

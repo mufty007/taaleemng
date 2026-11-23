@@ -20,8 +20,10 @@ use App\Enums\ClassSection;
 use App\Enums\CommentAudience;
 use App\Enums\EnrolmentStatus;
 use App\Enums\InventoryCategory;
+use App\Enums\InvoiceStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\PayrollRunStatus;
+use App\Enums\ReminderChannel;
 use App\Enums\SchoolRole;
 use App\Enums\SpecialExamKind;
 use App\Enums\StockMovementType;
@@ -35,6 +37,7 @@ use App\Models\ClassSubject;
 use App\Models\Enrolment;
 use App\Models\ExamPaper;
 use App\Models\FeeItem;
+use App\Models\FeeReminder;
 use App\Models\FeeStructure;
 use App\Models\Guardian;
 use App\Models\InventoryItem;
@@ -1169,6 +1172,50 @@ final class DemoSchoolBuilder
      * Mock and practice exams for the exit classes: a published WAEC mock and BECE practice,
      * a JAMB practice still being marked, and a Common Entrance practice with one paper in.
      */
+    /**
+     * The bursar has already chased some of the families who owe: WhatsApp and email
+     * over the last fortnight (SMS is not available yet), so the debtors list shows who was reminded.
+     */
+    public function feeReminders(string $bursar = 'bursar'): void
+    {
+        $user = $this->staffMember($bursar)->user;
+        $owing = Invoice::query()
+            ->whereIn('status', [InvoiceStatus::Unpaid, InvoiceStatus::PartPaid])
+            ->with('student.guardians')
+            ->orderByDesc('total')
+            ->limit(60)
+            ->get()
+            ->unique('student_id')
+            ->values();
+        $channels = [ReminderChannel::WhatsApp, ReminderChannel::WhatsApp, ReminderChannel::Email];
+
+        foreach ($owing as $index => $invoice) {
+            if ($index % 3 === 2) {
+                continue;
+            }
+
+            $guardian = $invoice->student->guardians->first();
+            $channel = $channels[$index % count($channels)];
+
+            if ($channel === ReminderChannel::Email && blank($guardian?->email)) {
+                $channel = ReminderChannel::WhatsApp;
+            }
+
+            $sentAt = now()->subDays(1 + ($index * 5) % 14)->setTime(9 + $index % 6, ($index * 13) % 60);
+
+            FeeReminder::query()->forceCreate([
+                'school_id' => $invoice->school_id,
+                'student_id' => $invoice->student_id,
+                'guardian_id' => $guardian?->id,
+                'channel' => $channel,
+                'amount' => $invoice->balance(),
+                'sent_by' => $user?->id,
+                'created_at' => $sentAt,
+                'updated_at' => $sentAt,
+            ]);
+        }
+    }
+
     public function specialExams(?string $setBy = 'principal'): void
     {
         $session = AcademicSession::current();

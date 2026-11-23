@@ -15,6 +15,7 @@ class SchoolStatusController extends Controller
     {
         $data = $request->validate([
             'status' => ['required', Rule::enum(SchoolStatus::class)],
+            'reason' => ['nullable', 'string', 'max:200'],
         ]);
 
         $status = SchoolStatus::from($data['status']);
@@ -26,8 +27,8 @@ class SchoolStatusController extends Controller
         activity('platform')
             ->performedOn($school)
             ->tap(fn ($activity) => $activity->school_id = $school->id)
-            ->log("changed the school’s status to {$status->label()}");
+            ->log("changed the school’s status to {$status->label()}".(filled($data['reason'] ?? null) ? ": {$data['reason']}" : ''));
 
-        return back()->with('status', "{$school->name} is now {$status->label()}.");
+        return redirect()->to(route('platform.schools.show', $school).'#settings')->with('status', "{$school->name} is now {$status->label()}.");
     }
 }
