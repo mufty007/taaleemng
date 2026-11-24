@@ -11,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * An actual class of students, such as JSS 2A.
+ *
+ * @property-read Stream|null $stream
  */
 #[Fillable(['class_level_id', 'stream_id', 'form_teacher_id', 'name', 'capacity'])]
 class ClassArm extends Model
@@ -79,7 +81,7 @@ class ClassArm extends Model
         $level = $this->level->short_name;
 
         // Blank name, or stream name stored for uniqueness in single-class mode.
-        if ($this->name === '' || $this->name === null) {
+        if ($this->name === '') {
             return $this->stream ? "{$level} {$this->stream->name}" : $level;
         }
 

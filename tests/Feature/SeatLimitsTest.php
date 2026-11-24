@@ -48,3 +48,25 @@ it('blocks adding staff once the plan’s staff seats are full', function () {
         'email' => 'tunde.extra@limits.test',
     ])->assertSessionHasErrors('plan');
 });
+
+it('tells the admin why a student was not added, with a way to see the plans', function () {
+    enrol($this->school, 'JSS 1', 'A');
+    enrol($this->school, 'JSS 1', 'A');
+
+    $this->actingAs($this->admin)
+        ->from(route('school.students.create', $this->school))
+        ->followingRedirects()
+        ->post(route('school.students.store', $this->school), [
+            'first_name' => 'Chioma',
+            'last_name' => 'Okafor',
+            'gender' => 'female',
+            'class_arm_id' => $this->arm->id,
+            'guardian_first_name' => 'Ngozi',
+            'guardian_last_name' => 'Okafor',
+            'guardian_relationship' => 'mother',
+            'guardian_phone' => '0803 111 2224',
+        ])
+        ->assertOk()
+        ->assertSee('plan allows 2 students')
+        ->assertSee('See plans');
+});

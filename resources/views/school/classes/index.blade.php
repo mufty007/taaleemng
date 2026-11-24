@@ -6,7 +6,7 @@
     <x-page-header kicker="Academics" title="Classes" :description="$session ? $rows->count().' classes · sizes are for the '.$session->name.' session.' : 'Set up a session to start enrolling students into classes.'">
         @if ($canManage && $rows->isNotEmpty())
             <x-slot:actions>
-                <x-button icon="plus" type="button" x-data x-on:click="$dispatch('open-drawer', 'add-arm')">Add a class arm</x-button>
+                <x-button icon="plus" type="button" x-data x-on:click="$dispatch('open-drawer', 'add-arm')">{{ $singleClasses ? 'Add a class' : 'Add a class arm' }}</x-button>
             </x-slot:actions>
         @endif
     </x-page-header>
@@ -103,16 +103,25 @@
     @endif
 
     @if ($canManage)
-        <x-drawer name="add-arm" title="Add a class arm" description="The new arm gets the standard subjects for its class. You can change them on the class page." :show="$errors->addArm->isNotEmpty()">
+        <x-drawer
+            name="add-arm"
+            :title="$singleClasses ? 'Add a class' : 'Add a class arm'"
+            :description="$singleClasses ? 'Your school runs one class per level, so each level (or SSS stream) has one class. It gets the standard subjects.' : 'The new arm gets the standard subjects for its class. You can change them on the class page.'"
+            :show="$errors->addArm->isNotEmpty()"
+        >
             <form method="POST" action="{{ route('school.classes.store') }}" class="flex flex-col gap-4">
                 @csrf
                 <x-select-field label="Class" name="class_level_id" :options="$levelOptions" bag="addArm" required />
-                <x-field label="Arm name" name="name" bag="addArm" placeholder="B" hint="Usually a letter, e.g. B for JSS 2B." required />
+                @if ($singleClasses)
+                    <p class="m-0 rounded-xl bg-canvas px-3 py-2.5 text-sm text-muted">Need JSS 1A and JSS 1B? Switch to “A, B, C arms” in <a href="{{ route('school.settings.edit') }}#classes" class="font-medium text-brand-600">Settings → Classes</a>.</p>
+                @else
+                    <x-field label="Arm name" name="name" bag="addArm" placeholder="B" hint="Usually a letter, e.g. B for JSS 2B." required />
+                @endif
                 @if ($streamOptions)
                     <x-select-field label="Stream (SSS only)" name="stream_id" :options="$streamOptions" placeholder="No stream" bag="addArm" />
                 @endif
                 <x-select-field label="Form teacher" name="form_teacher_id" :options="$teacherOptions" placeholder="Choose later" bag="addArm" />
-                <x-button variant="brand" class="self-start">Add class arm</x-button>
+                <x-button variant="brand" class="self-start">{{ $singleClasses ? 'Add class' : 'Add class arm' }}</x-button>
             </form>
         </x-drawer>
 
@@ -122,11 +131,14 @@
                 <form method="POST" :action="action" class="flex flex-col gap-4">
                     @csrf
                     @method('PATCH')
-                    <div class="flex flex-col gap-1.5">
-                        <label for="edit-arm-name" class="text-sm font-semibold">Arm name</label>
-                        <input id="edit-arm-name" name="name" x-model="values.name" required class="field">
-                        @error('name', 'editArm')<p class="text-[13px] font-medium text-danger">{{ $message }}</p>@enderror
-                    </div>
+                    @unless ($singleClasses)
+                        <div class="flex flex-col gap-1.5">
+                            <label for="edit-arm-name" class="text-sm font-semibold">Arm name</label>
+                            <input id="edit-arm-name" name="name" x-model="values.name" required class="field">
+                            @error('name', 'editArm')<p class="text-[13px] font-medium text-danger">{{ $message }}</p>@enderror
+                        </div>
+                    @endunless
+                    @error('stream_id', 'editArm')<p class="m-0 text-[13px] font-medium text-danger">{{ $message }}</p>@enderror
                     @if ($streamOptions)
                         <div class="flex flex-col gap-1.5">
                             <label for="edit-arm-stream" class="text-sm font-semibold">Stream</label>

@@ -316,6 +316,19 @@
         </header>
 
         <main data-app-main class="mx-auto flex max-w-[1280px] flex-col gap-6 px-4 pt-6 pb-[calc(1.5rem+var(--tabbar-h,0px))] sm:px-6 sm:pt-8 sm:pb-[calc(2rem+var(--tabbar-h,0px))]">
+            {{-- A student or staff member could not be added because the plan's seats are full. --}}
+            @if ($errors->has('plan') && $currentSchool)
+                <div class="flex flex-wrap items-start gap-3 rounded-2xl border border-danger/30 bg-danger-50 px-4 py-3" role="alert">
+                    <x-lucide-users class="mt-0.5 size-5 flex-none text-danger" aria-hidden="true" />
+                    <p class="m-0 min-w-0 flex-1 text-sm text-ink">{{ $errors->first('plan') }}</p>
+                    @can('school.manage')
+                        <x-button variant="brand" size="sm" :href="route('school.settings.edit').'#subscription'">See plans</x-button>
+                    @else
+                        <span class="text-sm text-muted">Ask your school admin to upgrade.</span>
+                    @endcan
+                </div>
+            @endif
+
             {{-- Notices from Ta'aleem (platform broadcasts), until they end or are dismissed. --}}
             @foreach ($broadcasts as $broadcast)
                 @php

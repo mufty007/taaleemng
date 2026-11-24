@@ -49,14 +49,30 @@ class ConfirmSchoolSubscriptionPayment
             ]);
 
             $school = $invoice->school;
-            $paidUntil = $school->billing_cycle === 'annual'
-                ? $paidAt->copy()->addYear()
-                : $paidAt->copy()->addMonths(4);
+            $cycle = $invoice->billing_cycle ?? $school->billing_cycle;
 
-            $school->update([
+            // Paying early adds to the time already paid for, instead of losing it.
+            $from = $school->paid_until?->isAfter($paidAt) ? $school->paid_until->copy() : $paidAt->copy();
+            $paidUntil = $cycle === 'annual' ? $from->addYear() : $from->addMonths(4);
+
+            $changes = [
                 'paid_until' => $paidUntil,
                 'status' => $school->status === SchoolStatus::Trial ? SchoolStatus::Active : $school->status,
-            ]);
+            ];
+
+            // The school chose this plan itself: switch to it now that it is paid for.
+            if ($invoice->plan !== null) {
+                $changes += [
+                    'plan' => $invoice->plan,
+                    'billing_model' => $invoice->billing_model ?? $school->billing_model,
+                    'billing_cycle' => $cycle,
+                    // A hand-set seat cap only survives if it is more generous than the new plan.
+                    'max_students' => $school->max_students !== null && $school->max_students > ($invoice->plan->maxStudents() ?? PHP_INT_MAX) ? $school->max_students : null,
+                    'max_staff' => $school->max_staff !== null && $school->max_staff > ($invoice->plan->maxStaff() ?? PHP_INT_MAX) ? $school->max_staff : null,
+                ];
+            }
+
+            $school->update($changes);
 
             activity('platform')
                 ->performedOn($invoice)

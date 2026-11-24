@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Platform;
 
+use App\Actions\Billing\IssueSchoolInvoice;
 use App\Enums\BillingModel;
 use App\Enums\Plan;
 use App\Enums\SchoolInvoiceStatus;
@@ -154,7 +155,7 @@ class BillingController extends Controller
     /**
      * Bill a school for a term or year: flat plan fee, or students × price per student.
      */
-    public function storeInvoice(Request $request, School $school): RedirectResponse
+    public function storeInvoice(Request $request, School $school, IssueSchoolInvoice $issueInvoice): RedirectResponse
     {
         $data = $request->validateWithBag('invoice', [
             'period' => ['required', 'string', 'max:80'],
@@ -179,25 +180,19 @@ class BillingController extends Controller
             ? ($school->pricePerStudent() ?? 0)
             : $amount;
 
-        $invoice = DB::transaction(function () use ($school, $data, $unit, $amount, $students, $request): SchoolInvoice {
-            $year = now()->year;
-            $sequence = SchoolInvoice::query()->whereYear('issued_on', $year)->lockForUpdate()->count() + 1;
-
-            return SchoolInvoice::query()->create([
-                'school_id' => $school->id,
-                'number' => sprintf('TAL-%d-%04d', $year, $sequence),
-                'period' => $data['period'],
-                'billing_model' => ($school->billing_model ?? BillingModel::Flat)->value,
-                'students' => $students,
-                'unit_price' => $unit,
-                'amount' => $amount,
-                'status' => SchoolInvoiceStatus::Draft,
-                'issued_on' => today(),
-                'due_on' => $data['due_on'],
-                'notes' => $data['notes'] ?? null,
-                'created_by' => $request->user()->id,
-            ]);
-        });
+        $invoice = $issueInvoice->handle([
+            'school_id' => $school->id,
+            'period' => $data['period'],
+            'billing_model' => ($school->billing_model ?? BillingModel::Flat)->value,
+            'billing_cycle' => $school->billing_cycle ?: 'termly',
+            'students' => $students,
+            'unit_price' => $unit,
+            'amount' => $amount,
+            'status' => SchoolInvoiceStatus::Draft,
+            'due_on' => $data['due_on'],
+            'notes' => $data['notes'] ?? null,
+            'created_by' => $request->user()->id,
+        ]);
 
         $this->log($school, "issued invoice {$invoice->number} for ".Money::format($invoice->amount));
 

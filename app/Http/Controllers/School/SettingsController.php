@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers\School;
 
+use App\Actions\Academic\LetterClassArms;
 use App\Actions\Academic\MergeClassArms;
 use App\Actions\Fees\SyncSchoolPayoutSubaccount;
+use App\Enums\BillingModel;
 use App\Enums\ClassStructure;
 use App\Enums\SchoolInvoiceStatus;
 use App\Enums\SchoolRole;
@@ -13,6 +15,8 @@ use App\Models\ClassLevel;
 use App\Models\NumberSequence;
 use App\Models\SchoolInvoice;
 use App\Models\SchoolSetting;
+use App\Support\Billing\PlanCatalog;
+use App\Support\Billing\SeatLimits;
 use App\Support\Numbering\SequenceGenerator;
 use App\Support\Payments\NigerianBanks;
 use App\Support\Payments\Paystack;
@@ -46,7 +50,7 @@ class SettingsController extends Controller
         ];
     }
 
-    public function edit(CurrentSchool $currentSchool, SequenceGenerator $sequences, Paystack $paystack): View
+    public function edit(CurrentSchool $currentSchool, SequenceGenerator $sequences, Paystack $paystack, SeatLimits $seats): View
     {
         $school = $currentSchool->getOrFail();
         $stored = NumberSequence::query()->get()->keyBy('key');
@@ -76,6 +80,14 @@ class SettingsController extends Controller
             'subscriptionInvoices' => SchoolInvoice::query()->where('school_id', $school->id)
                 ->whereIn('status', [SchoolInvoiceStatus::Sent, SchoolInvoiceStatus::Paid])
                 ->latest('issued_on')->limit(4)->get(),
+            'plans' => PlanCatalog::publicPlans(),
+            'billingModels' => BillingModel::options(),
+            'seats' => [
+                'students' => $seats->studentCount($school),
+                'max_students' => $seats->maxStudents($school),
+                'staff' => $seats->staffCount($school),
+                'max_staff' => $seats->maxStaff($school),
+            ],
             'platformPaystackReady' => $paystack->isConfigured(),
             'banks' => NigerianBanks::options(),
             'numbering' => $numbering,
@@ -91,6 +103,7 @@ class SettingsController extends Controller
         CurrentSchool $currentSchool,
         SyncSchoolPayoutSubaccount $syncPayout,
         MergeClassArms $mergeClassArms,
+        LetterClassArms $letterClassArms,
     ): RedirectResponse {
         $school = $currentSchool->getOrFail();
         $numberingKeys = array_keys(config('taaleem.numbering'));
@@ -132,9 +145,10 @@ class SettingsController extends Controller
         }
 
         $structure = ClassStructure::from($data['class_structure']);
+        // Science / Arts / Commercial classes of one level are not arms to merge.
         $hasMultipleArms = ClassArm::query()
-            ->select('class_level_id')
-            ->groupBy('class_level_id')
+            ->select('class_level_id', 'stream_id')
+            ->groupBy('class_level_id', 'stream_id')
             ->havingRaw('count(*) > 1')
             ->exists();
         $needsMerge = $structure === ClassStructure::Single && $hasMultipleArms;
@@ -204,7 +218,11 @@ class SettingsController extends Controller
             $sequence->save();
         }
 
-        DB::transaction(function () use ($school, $structure, $needsMerge, $mergeClassArms, $setupChecklist, $roleOnboarding): void {
+        DB::transaction(function () use ($school, $structure, $needsMerge, $mergeClassArms, $letterClassArms, $setupChecklist, $roleOnboarding): void {
+            if ($structure === ClassStructure::Arms && $school->class_structure === ClassStructure::Single) {
+                ClassLevel::query()->orderBy('position')->each(fn (ClassLevel $level) => $letterClassArms->handle($level));
+            }
+
             if ($needsMerge || $structure === ClassStructure::Single) {
                 ClassLevel::query()->with('arms')->orderBy('position')->each(function (ClassLevel $level) use ($mergeClassArms): void {
                     $byStream = $level->arms->groupBy(fn (ClassArm $arm) => $arm->stream_id ?? 'none');
@@ -219,7 +237,7 @@ class SettingsController extends Controller
                     // Streamed singles keep the stream name so (class_level_id, name) stays unique.
                     $level->arms->each(function (ClassArm $arm): void {
                         $arm->loadMissing('stream');
-                        $arm->update(['name' => $arm->stream?->name ?? '']);
+                        $arm->update(['name' => $arm->stream_id === null ? '' : $arm->stream->name]);
                     });
                 });
             }

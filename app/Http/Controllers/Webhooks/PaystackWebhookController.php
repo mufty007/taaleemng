@@ -39,14 +39,15 @@ class PaystackWebhookController extends Controller
         }
 
         $reference = (string) $request->input('data.reference');
-        $transaction = $paystack->verify($reference);
 
+        // A school paying Ta'aleem for its subscription.
         if (SchoolInvoice::query()->where('paystack_reference', $reference)->exists()) {
-            $confirmSubscription->handle($reference, $transaction);
+            $confirmSubscription->handle($reference, $paystack->verify($reference));
 
             return response()->noContent();
         }
 
+        // A parent paying a school's fees. Payments that are not ours are acknowledged and ignored.
         $schoolId = StartOnlinePayment::schoolIdFromReference($reference);
         $school = $schoolId ? School::query()->find($schoolId) : null;
 
@@ -54,6 +55,7 @@ class PaystackWebhookController extends Controller
             return response()->noContent();
         }
 
+        $transaction = $paystack->verify($reference);
         $currentSchool->run($school, fn () => $confirmFees->handle($reference, $transaction));
 
         return response()->noContent();

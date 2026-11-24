@@ -13,9 +13,12 @@
 <x-layouts.app title="Settings">
     <x-page-header kicker="System" title="Settings" description="Admissions, promotion, payments and how document numbers are built for {{ $school->name }}." />
 
+    {{-- Subscription forms sit outside the settings form; their buttons point at them with form="…".
+         data-native: Paystack checkout is a full-page redirect, not an in-app page swap. --}}
+    <form id="subscription-checkout" method="POST" action="{{ route('school.settings.subscription.checkout') }}" class="hidden" data-native>@csrf</form>
     @foreach ($subscriptionInvoices as $invoice)
         @if ($invoice->status === \App\Enums\SchoolInvoiceStatus::Sent && $platformPaystackReady)
-            <form id="pay-subscription-{{ $invoice->id }}" method="POST" action="{{ route('school.settings.subscription.pay', $invoice) }}" class="hidden">@csrf</form>
+            <form id="pay-subscription-{{ $invoice->id }}" method="POST" action="{{ route('school.settings.subscription.pay', $invoice) }}" class="hidden" data-native>@csrf</form>
         @endif
     @endforeach
 
@@ -44,41 +47,147 @@
             label="Settings sections"
         >
             <x-tab name="subscription">
-                <x-card class="flex flex-wrap items-start gap-6">
-                    <div class="min-w-[220px] flex-1">
-                        <h2 class="m-0 text-lg font-semibold">Ta’aleem subscription</h2>
-                        <p class="m-0 mt-1 text-sm text-muted">
-                            {{ $school->plan->label() }} · {{ $school->billing_model->label() }}
-                            @if ($school->billing_model === \App\Enums\BillingModel::PerStudent && $school->pricePerStudent())
-                                · {{ \App\Support\Money::format($school->pricePerStudent()) }} per student per term
-                            @elseif ($school->billing_cycle === 'annual' && $school->plan->flatPriceAnnual())
-                                · {{ \App\Support\Money::format($school->plan->flatPriceAnnual()) }} / year
-                            @elseif ($school->plan->flatPriceTermly())
-                                · {{ \App\Support\Money::format($school->plan->flatPriceTermly()) }} / term
-                            @endif
-                            · up to {{ number_format($school->max_students ?? $school->plan->maxStudents() ?? 0) }} students
-                            / {{ number_format($school->max_staff ?? $school->plan->maxStaff() ?? 0) }} staff
-                            {{ $school->paid_until ? ' · paid up to '.$school->paid_until->format('j M Y') : '' }}.
-                            Questions? Email {{ config('taaleem.marketing.contact_email') }}.
-                        </p>
-                    </div>
-                    <ul class="m-0 flex w-full list-none flex-col gap-2 p-0 sm:w-auto sm:min-w-[320px]">
-                        @forelse ($subscriptionInvoices as $invoice)
-                            <li class="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-canvas px-3 py-2 text-sm">
-                                <span><span class="font-mono">{{ $invoice->number }}</span> · {{ $invoice->period }}</span>
-                                <span class="flex items-center gap-2">
-                                    <span class="font-semibold">{{ \App\Support\Money::format($invoice->amount) }}</span>
-                                    <x-badge :tone="$invoice->isOverdue() ? 'danger' : $invoice->status->tone()">{{ $invoice->isOverdue() ? 'Overdue' : ($invoice->status === \App\Enums\SchoolInvoiceStatus::Sent ? 'Due '.$invoice->due_on->format('j M') : 'Paid') }}</x-badge>
-                                    @if ($invoice->status === \App\Enums\SchoolInvoiceStatus::Sent && $platformPaystackReady)
-                                        <x-button type="submit" form="pay-subscription-{{ $invoice->id }}" variant="brand" size="sm">Pay online</x-button>
+                @php
+                    $meters = [
+                        ['label' => 'Students', 'used' => $seats['students'], 'max' => $seats['max_students']],
+                        ['label' => 'Staff', 'used' => $seats['staff'], 'max' => $seats['max_staff']],
+                    ];
+                    [$standingTone, $standing] = match (true) {
+                        $school->status === \App\Enums\SchoolStatus::Trial && $school->trial_ends_at => ['gold', 'Free trial until '.$school->trial_ends_at->format('j M Y')],
+                        $school->paid_until?->isFuture() => ['naija', 'Paid up to '.$school->paid_until->format('j M Y')],
+                        $school->paid_until !== null => ['danger', 'Renewal was due '.$school->paid_until->format('j M Y')],
+                        default => ['neutral', ucfirst($school->status->label())],
+                    };
+                @endphp
+                <div class="flex flex-col gap-5">
+                    {{-- Where the school stands today. --}}
+                    <x-card class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                        <div class="min-w-0">
+                            <p class="kicker m-0">Ta’aleem subscription</p>
+                            <div class="mt-1 flex flex-wrap items-center gap-2">
+                                <h2 class="m-0 text-2xl font-semibold tracking-tight">{{ $school->plan->label() }}</h2>
+                                <x-badge :tone="$standingTone">{{ $standing }}</x-badge>
+                            </div>
+                            <p class="m-0 mt-2 text-sm text-muted">
+                                {{ $school->billing_model->label() }}{{ $school->billing_model === \App\Enums\BillingModel::Flat ? ', paid '.($school->billing_cycle === 'annual' ? 'yearly' : 'each term') : ', billed each term' }}.
+                                Every plan includes every feature — only the number of students and staff changes.
+                            </p>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            @foreach ($meters as $meter)
+                                @php
+                                    $percent = $meter['max'] ? min(100, (int) round($meter['used'] / max(1, $meter['max']) * 100)) : 0;
+                                    $bar = $percent >= 100 ? 'bg-danger' : ($percent >= 85 ? 'bg-gold' : 'bg-brand-600');
+                                @endphp
+                                <div class="rounded-2xl border border-line bg-canvas p-4">
+                                    <p class="m-0 text-sm text-muted">{{ $meter['label'] }}</p>
+                                    <p class="m-0 mt-1 text-xl font-semibold tabular-nums">
+                                        {{ number_format($meter['used']) }}<span class="text-sm font-normal text-muted"> / {{ $meter['max'] ? number_format($meter['max']) : 'no limit' }}</span>
+                                    </p>
+                                    @if ($meter['max'])
+                                        <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-line" role="meter" aria-label="{{ $meter['label'] }} seats used" aria-valuemin="0" aria-valuemax="{{ $meter['max'] }}" aria-valuenow="{{ $meter['used'] }}">
+                                            <div class="h-full rounded-full {{ $bar }}" style="width: {{ $percent }}%"></div>
+                                        </div>
                                     @endif
-                                </span>
-                            </li>
-                        @empty
-                            <li class="text-sm text-muted">No invoices yet.</li>
-                        @endforelse
-                    </ul>
-                </x-card>
+                                </div>
+                            @endforeach
+                        </div>
+                    </x-card>
+
+                    {{-- Choose (or renew) a plan and pay with Paystack. --}}
+                    <x-card x-data="{ billing: @js($school->billing_model === \App\Enums\BillingModel::PerStudent ? 'per_student' : ($school->billing_cycle === 'annual' ? 'flat-annual' : 'flat-termly')) }">
+                        <div class="flex flex-wrap items-end justify-between gap-4">
+                            <div>
+                                <h2 class="m-0 text-lg font-semibold">Choose a plan</h2>
+                                <p class="m-0 mt-1 text-sm text-muted">Pay securely with card, bank transfer or USSD through Paystack. Your plan switches as soon as the payment clears.</p>
+                            </div>
+                            <div class="flex flex-wrap gap-1 rounded-xl bg-chip p-1 text-sm font-medium" role="radiogroup" aria-label="How you pay">
+                                @foreach (['flat-termly' => 'Per term', 'flat-annual' => 'Per year', 'per_student' => 'Per student'] as $value => $label)
+                                    <label class="cursor-pointer rounded-lg px-3 py-1.5 transition" :class="billing === '{{ $value }}' ? 'bg-white text-ink shadow-card' : 'text-muted hover:text-ink'">
+                                        <input type="radio" class="sr-only" value="{{ $value }}" x-model="billing">{{ $label }}
+                                    </label>
+                                @endforeach
+                            </div>
+                        </div>
+                        <input type="hidden" name="billing_model" form="subscription-checkout" :value="billing === 'per_student' ? 'per_student' : 'flat'">
+                        <input type="hidden" name="billing_cycle" form="subscription-checkout" :value="billing === 'flat-annual' ? 'annual' : 'termly'">
+
+                        @unless ($platformPaystackReady)
+                            <p class="m-0 mt-4 rounded-xl border border-gold-200 bg-gold-50 px-4 py-3 text-sm text-gold">Online payment isn’t switched on yet. Email {{ config('taaleem.marketing.contact_email') }} and we’ll set up your plan.</p>
+                        @endunless
+
+                        <div class="mt-5 grid gap-4 md:grid-cols-3">
+                            @foreach ($plans as $plan)
+                                @php
+                                    $tier = \App\Enums\Plan::from($plan['key']);
+                                    $isCurrent = $school->plan === $tier;
+                                    $tooSmall = ($plan['max_students'] !== null && $seats['students'] > $plan['max_students'])
+                                        || ($plan['max_staff'] !== null && $seats['staff'] > $plan['max_staff']);
+                                    $perStudentTotal = $tier->defaultPrice() && $seats['students'] > 0 ? \App\Support\Money::format($tier->defaultPrice() * $seats['students']) : null;
+                                @endphp
+                                <div @class([
+                                    'flex flex-col gap-3 rounded-2xl border p-5',
+                                    'border-brand-600 ring-1 ring-brand-600' => $isCurrent,
+                                    'border-line' => ! $isCurrent,
+                                ])>
+                                    <div class="flex items-center justify-between gap-2">
+                                        <h3 class="m-0 text-base font-semibold">{{ $plan['name'] }}</h3>
+                                        @if ($isCurrent)
+                                            <x-badge tone="brand">Current</x-badge>
+                                        @elseif ($plan['popular'])
+                                            <x-badge tone="gold">Popular</x-badge>
+                                        @endif
+                                    </div>
+                                    <div class="min-h-[3.25rem]">
+                                        <p class="m-0 text-2xl font-bold tracking-tight" x-show="billing === 'flat-termly'">{{ $plan['flat_termly'] ?? '—' }}<span class="text-sm font-normal text-muted"> / term</span></p>
+                                        <p class="m-0 text-2xl font-bold tracking-tight" x-show="billing === 'flat-annual'" x-cloak>{{ $plan['flat_annual'] ?? '—' }}<span class="text-sm font-normal text-muted"> / year</span></p>
+                                        <div x-show="billing === 'per_student'" x-cloak>
+                                            <p class="m-0 text-2xl font-bold tracking-tight">{{ $plan['per_student'] ?? '—' }}<span class="text-sm font-normal text-muted"> / student / term</span></p>
+                                            @if ($perStudentTotal)
+                                                <p class="m-0 text-xs text-muted">{{ $perStudentTotal }} for your {{ number_format($seats['students']) }} students</p>
+                                            @endif
+                                        </div>
+                                    </div>
+                                    <p class="m-0 text-sm font-medium">Up to {{ number_format($plan['max_students']) }} students · {{ number_format($plan['max_staff']) }} staff</p>
+                                    <p class="m-0 flex-1 text-sm text-muted">{{ $plan['description'] }}</p>
+                                    @if ($tooSmall)
+                                        <p class="m-0 rounded-xl bg-canvas px-3 py-2.5 text-center text-sm text-muted">Too small for your school today</p>
+                                    @else
+                                        <x-button
+                                            type="submit"
+                                            form="subscription-checkout"
+                                            name="plan"
+                                            value="{{ $plan['key'] }}"
+                                            :variant="$isCurrent ? 'brand' : 'secondary'"
+                                            :disabled="! $platformPaystackReady"
+                                        >{{ $isCurrent ? 'Pay for '.$plan['name'] : 'Switch to '.$plan['name'] }}</x-button>
+                                    @endif
+                                </div>
+                            @endforeach
+                        </div>
+                        <p class="m-0 mt-4 text-sm text-muted">More than {{ number_format(collect($plans)->max('max_students')) }} students, or several campuses? Email {{ config('taaleem.marketing.contact_email') }} for a custom plan.</p>
+                    </x-card>
+
+                    <x-card>
+                        <h2 class="m-0 text-lg font-semibold">Invoices from Ta’aleem</h2>
+                        <ul class="m-0 mt-3 flex list-none flex-col gap-2 p-0">
+                            @forelse ($subscriptionInvoices as $invoice)
+                                <li class="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-canvas px-3 py-2 text-sm">
+                                    <span><span class="font-mono">{{ $invoice->number }}</span> · {{ $invoice->period }}</span>
+                                    <span class="flex items-center gap-2">
+                                        <span class="font-semibold">{{ \App\Support\Money::format($invoice->amount) }}</span>
+                                        <x-badge :tone="$invoice->isOverdue() ? 'danger' : $invoice->status->tone()">{{ $invoice->isOverdue() ? 'Overdue' : ($invoice->status === \App\Enums\SchoolInvoiceStatus::Sent ? 'Due '.$invoice->due_on->format('j M') : 'Paid') }}</x-badge>
+                                        @if ($invoice->status === \App\Enums\SchoolInvoiceStatus::Sent && $platformPaystackReady)
+                                            <x-button type="submit" form="pay-subscription-{{ $invoice->id }}" variant="brand" size="sm">Pay online</x-button>
+                                        @endif
+                                    </span>
+                                </li>
+                            @empty
+                                <li class="text-sm text-muted">No invoices yet.</li>
+                            @endforelse
+                        </ul>
+                    </x-card>
+                </div>
             </x-tab>
 
             <x-tab name="admissions">

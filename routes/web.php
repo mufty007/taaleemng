@@ -337,6 +337,7 @@ Route::middleware('auth')->group(function () {
             Route::post('/onboarding/complete', [School\OnboardingController::class, 'complete'])->name('onboarding.complete');
 
             Route::middleware('can:school.manage')->group(function () {
+                Route::post('/settings/subscription/checkout', [School\SubscriptionPaymentController::class, 'checkout'])->name('settings.subscription.checkout');
                 Route::post('/settings/invoices/{invoice}/pay', [School\SubscriptionPaymentController::class, 'pay'])->name('settings.subscription.pay');
                 Route::get('/settings/subscription/callback', [School\SubscriptionPaymentController::class, 'callback'])->name('settings.subscription.callback');
                 Route::get('/school-information', [School\SchoolProfileController::class, 'edit'])->name('profile.edit');

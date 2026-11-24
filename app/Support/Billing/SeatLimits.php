@@ -21,14 +21,14 @@ final class SeatLimits
     {
         $school ??= $this->currentSchool->getOrFail();
 
-        return $school->max_students ?? $school->plan?->maxStudents();
+        return $school->max_students ?? $school->plan->maxStudents();
     }
 
     public function maxStaff(?School $school = null): ?int
     {
         $school ??= $this->currentSchool->getOrFail();
 
-        return $school->max_staff ?? $school->plan?->maxStaff();
+        return $school->max_staff ?? $school->plan->maxStaff();
     }
 
     public function studentCount(?School $school = null): int

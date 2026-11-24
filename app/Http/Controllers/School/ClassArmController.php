@@ -4,6 +4,7 @@ namespace App\Http\Controllers\School;
 
 use App\Actions\Academic\AddClassArm;
 use App\Actions\Academic\ApplyNigerianDefaults;
+use App\Enums\ClassStructure;
 use App\Enums\StaffStatus;
 use App\Http\Controllers\Controller;
 use App\Models\AcademicSession;
@@ -18,6 +19,7 @@ use App\Models\Term;
 use App\Support\Attendance\AttendanceSummary;
 use App\Support\Attendance\ClassRegister;
 use App\Support\Classwork\ClassworkAccess;
+use App\Support\Tenancy\CurrentSchool;
 use App\Support\Tenancy\TenantRule;
 use App\Support\Timetable\Timetable;
 use Illuminate\Contracts\View\View;
@@ -63,7 +65,16 @@ class ClassArmController extends Controller
             'levelOptions' => ClassLevel::query()->orderBy('position')->pluck('name', 'id')->all(),
             'streamOptions' => Stream::query()->orderBy('name')->pluck('name', 'id')->all(),
             'teacherOptions' => $this->teacherOptions(),
+            'singleClasses' => $this->usesSingleClasses(),
         ]);
+    }
+
+    /**
+     * Whether this school runs one class per level instead of A, B, C arms.
+     */
+    private function usesSingleClasses(): bool
+    {
+        return app(CurrentSchool::class)->getOrFail()->class_structure === ClassStructure::Single;
     }
 
     public function show(Request $request, ClassArm $classArm): View
@@ -121,19 +132,34 @@ class ClassArmController extends Controller
 
     public function store(Request $request, AddClassArm $addClassArm): RedirectResponse
     {
+        $single = $this->usesSingleClasses();
+
         $data = $request->validateWithBag('addArm', [
             'class_level_id' => ['required', TenantRule::exists('class_levels')],
-            'name' => ['required', 'string', 'max:20', Rule::unique('class_arms')->where('class_level_id', $request->input('class_level_id'))],
+            'name' => [$single ? 'nullable' : 'required', 'string', 'max:20', Rule::unique('class_arms')->where('class_level_id', $request->input('class_level_id'))],
             'stream_id' => ['nullable', TenantRule::exists('streams')],
             'form_teacher_id' => ['nullable', TenantRule::exists('staff')],
         ], [
             'name.unique' => 'That class already has an arm with this name.',
         ]);
 
+        $level = ClassLevel::query()->findOrFail($data['class_level_id']);
+        $stream = isset($data['stream_id']) ? Stream::query()->find($data['stream_id']) : null;
+
+        // One class per level (per stream in SSS): no letters, and no second class.
+        if ($single) {
+            if ($level->arms()->where('stream_id', $stream?->id)->exists()) {
+                return back()->withErrors([
+                    'class_level_id' => $level->name.($stream ? " {$stream->name}" : '').' already has its class. To run arms like '.$level->short_name.'A and '.$level->short_name.'B, switch to “A, B, C arms” in Settings → Classes.',
+                ], 'addArm')->withInput();
+            }
+
+        }
+
         $arm = $addClassArm->handle(
-            ClassLevel::query()->findOrFail($data['class_level_id']),
-            strtoupper(trim($data['name'])),
-            isset($data['stream_id']) ? Stream::query()->find($data['stream_id']) : null,
+            $level,
+            $single ? ($stream->name ?? '') : strtoupper(trim((string) $data['name'])),
+            $stream,
             $data['form_teacher_id'] ?? null,
         );
 
@@ -149,7 +175,20 @@ class ClassArmController extends Controller
             'form_teacher_id' => ['nullable', TenantRule::exists('staff')],
         ], ['name.unique' => 'That class already has an arm with this name.']);
 
-        if (isset($data['name'])) {
+        if ($this->usesSingleClasses()) {
+            // A single class is named after its stream (or nothing), never a letter.
+            unset($data['name']);
+
+            if (array_key_exists('stream_id', $data)) {
+                $name = Stream::query()->find($data['stream_id'])->name ?? '';
+
+                if (ClassArm::query()->where('class_level_id', $classArm->class_level_id)->whereKeyNot($classArm->id)->where('name', $name)->exists()) {
+                    return back()->withErrors(['stream_id' => 'That class already has a class for this stream.'], 'editArm');
+                }
+
+                $data['name'] = $name;
+            }
+        } elseif (isset($data['name'])) {
             $data['name'] = strtoupper(trim($data['name']));
         }
 
